@@ -296,7 +296,7 @@ src-tauri\target\x86_64-pc-windows-gnu\release\blacksite-node.exe
 
 ### Pre-Compiled Binaries
 
-For non-technical users, pre-compiled binaries are available (or will be available) in the **GitHub Releases** tab. No Rust toolchain, no Node.js, no build environment required. Download, verify, run.
+For non-technical users, pre-compiled binaries are available in the **GitHub Releases** tab. No Rust toolchain, no Node.js, no build environment required. Download, verify, run.
 
 Each release includes:
 - A SHA-256 checksum file for integrity verification
