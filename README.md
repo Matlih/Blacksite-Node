@@ -187,14 +187,14 @@ This assumes the attacker knows the algorithm, has the vault file, has a GPU clu
 | Tauri CLI v2 | bundled | invoked via `npm run tauri` |
 | Platform linker | Windows: MSVC or GNU | GNU used in this project |
 
-**Windows — GNU toolchain setup (keep C: clear):**
+**Windows — GNU toolchain setup:**
 
 ```powershell
-# Install MSYS2 to a non-system drive, e.g. D:\msys64
-# Then in MSYS2 MinGW64 shell:
+# Install MSYS2 (recommended: install to a non-system drive to preserve C: space)
+# Then in the MSYS2 MinGW64 shell:
 pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-lld
 
-# Set environment (add to your profile for permanence):
+# Set environment variables (add to your profile for permanence):
 $env:CARGO_HOME  = 'D:\Rust\.cargo'
 $env:RUSTUP_HOME = 'D:\Rust\.rustup'
 $env:PATH        = "D:\Rust\.cargo\bin;D:\msys64\mingw64\bin;D:\msys64\usr\bin;$env:PATH"
@@ -202,6 +202,28 @@ $env:PATH        = "D:\Rust\.cargo\bin;D:\msys64\mingw64\bin;D:\msys64\usr\bin;$
 # Install the GNU Rust target:
 rustup default stable-x86_64-pc-windows-gnu
 ```
+
+### Known Issues & Troubleshooting
+
+**`export ordinal too large` linker error**
+
+```
+= note: ld.lld: error: too many exported symbols (got 101049, max 65535)
+        collect2.exe: error: ld returned 1 exit status
+error: could not compile `blacksite-node`
+```
+
+This error occurs when the Windows PE/DLL format's hard limit of 65,535 export ordinals is exceeded. It is triggered by including `cdylib` or `staticlib` in the crate type — both produce a Windows DLL, which hits the PE format ceiling when a large dependency tree (Tauri + cryptographic crates) is in scope.
+
+**Fix:** Open `src-tauri/Cargo.toml` and ensure the lib section reads:
+
+```toml
+[lib]
+name = "blacksite_node_lib"
+crate-type = ["rlib"]
+```
+
+`cdylib` and `staticlib` are only required for mobile targets (Android/iOS). Desktop Tauri builds exclusively need `rlib`. This is the confirmed working configuration for this project — do not add `cdylib` or `staticlib` back unless targeting mobile platforms.
 
 ### Clone and Install
 
