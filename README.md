@@ -126,9 +126,10 @@ The rate limiter operates as a complement to Argon2id, not a replacement. Combin
 
 ### Encrypted Data Portability (.bsx)
 
-Blacksite Node does not export to plaintext formats (like CSV) to prevent accidental data leakage to the local filesystem. Instead, all vault exports are saved in `.bsx` (Blacksite Export) format. 
+Blacksite Node exclusively exports to encrypted formats to prevent accidental plaintext data leakage to the local filesystem. All vault exports are saved in `.bsx` (Blacksite Export) format. 
 
-A `.bsx` file is identical in structure to the main `vault.blacksite` file. It is a full ChaCha20-Poly1305 encrypted JSON blob. 
+A `.bsx` file is identical in structure to the main `vault.blacksite` file. It is a full ChaCha20-Poly1305 encrypted JSON blob. Because of this, every `.bsx` file inherits the vault's strict **Tamper Detection (Poly1305 MAC Verification)**. If a single bit of the export file is altered or corrupted during transit, the authentication tag mathematically fails and the app refuses to decrypt it.
+
 When importing a `.bsx` file on a new device, the user must provide the exact master passphrase used at the time the export was created. The Rust backend temporarily derives the old Argon2id key in memory, decrypts the `.bsx` payload, merges the entries into the active session, and immediately zeroizes the temporary key. The imported data is never written to disk until the active session is securely flushed using the current session's encryption key.
 
 ---
@@ -145,13 +146,15 @@ Each passphrase word is selected independently using the OS CSPRNG (`OsRng`, bac
 
 **Combination Space**
 
-The user may select the cryptographic length of their passphrase during initialization. The exponential scaling of the Diceware engine provides the following entropies:
+The user may select the cryptographic length of their **Master** passphrase during initialization (scaling dynamically from 5 to 24 words). The **Canary** passphrase is fixed to exactly 4 words to guarantee mathematical differentiation from any valid Master phrase.
+
+The exponential scaling of the Diceware engine provides the following entropies:
 
 ```
-Word pool           :  12,288 words
-Standard (5 words)  :  12,288^5 = 2.82 × 10^20 combinations
-Extended (8 words)  :  12,288^8 = 5.27 × 10^32 combinations
-Paranoid (12 words) :  12,288^12 = 1.18 × 10^49 combinations
+Word pool                 :  12,288 words
+Canary (Fixed 4 words)    :  12,288^4 = 2.27 × 10^16 combinations
+Master Baseline (5 words) :  12,288^5 = 2.82 × 10^20 combinations
+Master Maximum (24 words) :  12,288^24 = 3.24 × 10^98 combinations
 ```
 
 In context (using the baseline Standard 5-word mode):

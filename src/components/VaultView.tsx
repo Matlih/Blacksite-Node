@@ -51,30 +51,7 @@ const calculateMLStrength = (pwd: string): { score: number, label: string, color
   return { score: Math.min(100, bits), label: "STRONG", color: "bg-green-500" };
 };
 
-const parseCSV = (text: string) => {
-  const result: string[][] = [];
-  let row: string[] = [];
-  let inQuotes = false;
-  let val = '';
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i+1] === '"') { val += '"'; i++; }
-        else inQuotes = false;
-      } else val += c;
-    } else {
-      if (c === '"') inQuotes = true;
-      else if (c === ',') { row.push(val); val = ''; }
-      else if (c === '\n' || c === '\r') {
-        if (c === '\r' && text[i+1] === '\n') i++;
-        row.push(val); result.push(row); row = []; val = '';
-      } else val += c;
-    }
-  }
-  if (val || row.length > 0) { row.push(val); result.push(row); }
-  return result;
-};
+
 
 export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
   const [entries, setEntries] = useState<CredentialEntry[]>([]);
@@ -96,13 +73,6 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
   const [showGenerator, setShowGenerator] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   
-  const [showImportWizard, setShowImportWizard] = useState(false);
-  const [importHeaders, setImportHeaders] = useState<string[]>([]);
-  const [importData, setImportData] = useState<string[][]>([]);
-  const [importMapping, setImportMapping] = useState({
-    service: -1, username: -1, password: -1, notes: -1, category: -1
-  });
-  const [importLoading, setImportLoading] = useState(false);
 
   const [locking, setLocking] = useState(false);
   const [showLockAnimation, setShowLockAnimation] = useState(false);
@@ -283,66 +253,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result as string;
-      const rows = parseCSV(text).filter(r => r.some(c => c.trim()));
-      if (rows.length < 2) {
-        setError("CSV must contain headers and at least one row of data.");
-        return;
-      }
-      const headers = rows[0].map(h => h.trim());
-      const data = rows.slice(1);
-      
-      const findIdx = (names: string[]) => headers.findIndex(h => names.some(n => h.toLowerCase().includes(n)));
-      setImportMapping({
-        service: findIdx(['service', 'url', 'site', 'name', 'title']),
-        username: findIdx(['username', 'user', 'email', 'login']),
-        password: findIdx(['password', 'pass']),
-        notes: findIdx(['note', 'comment', 'extra']),
-        category: findIdx(['category', 'folder', 'group'])
-      });
-      
-      setImportHeaders(headers);
-      setImportData(data);
-      setShowImportWizard(true);
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
 
-  const confirmImport = async () => {
-    if (importMapping.service === -1 || importMapping.password === -1) {
-      setError("Service and Password columns are required.");
-      return;
-    }
-    setImportLoading(true);
-    let success = 0;
-    try {
-      for (const row of importData) {
-        const service = row[importMapping.service]?.trim();
-        const password = row[importMapping.password];
-        if (!service || !password) continue;
-        
-        const username = importMapping.username !== -1 ? row[importMapping.username]?.trim() : "";
-        const notes = importMapping.notes !== -1 ? row[importMapping.notes]?.trim() : "";
-        const category = importMapping.category !== -1 ? row[importMapping.category]?.trim() : "";
-        
-        await addCredential(service, username, password, notes, category);
-        success++;
-      }
-      setShowImportWizard(false);
-      await loadEntries();
-      setError(`Imported ${success} credentials successfully.`);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setImportLoading(false);
-    }
-  };
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -411,10 +322,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
               <option value={30} className="bg-gunmetal-900">30 MIN</option>
             </select>
           </div>
-          <label className="btn-ghost flex items-center gap-1 py-1 px-2 text-xs cursor-pointer">
-            <Plus size={12} /> CSV
-            <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
-          </label>
+
           <button onClick={handleExport} className="btn-ghost flex items-center gap-1 py-1 px-2 text-xs">
             <Download size={12} /> EXPORT
           </button>
@@ -522,42 +430,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
       )}
 
       {/* Import Wizard Modal */}
-      {showImportWizard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-gunmetal-800 border border-ops-600 p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center gap-2 mb-4 text-ops-400">
-              <Plus size={20} />
-              <h2 className="font-bold text-lg tracking-widest text-slate-text">MAP CSV COLUMNS</h2>
-            </div>
-            <div className="text-sm text-slate-label mb-4">
-              Found {importHeaders.length} columns and {importData.length} rows. Please map your CSV headers to the vault fields.
-            </div>
-            <div className="space-y-3 mb-6">
-              {(['service', 'username', 'password', 'notes', 'category'] as const).map(field => (
-                <div key={field} className="flex items-center justify-between">
-                  <div className="label-ops text-xs uppercase w-24">{field} {['service', 'password'].includes(field) && '*'}</div>
-                  <select 
-                    value={importMapping[field]} 
-                    onChange={(e) => setImportMapping(m => ({ ...m, [field]: parseInt(e.target.value) }))}
-                    className="flex-1 bg-gunmetal-900 border border-ops-600 px-2 py-1.5 text-xs text-slate-text outline-none focus:border-blue-ops"
-                  >
-                    <option value={-1}>-- Ignore --</option>
-                    {importHeaders.map((h, i) => (
-                      <option key={i} value={i}>{h}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowImportWizard(false)} disabled={importLoading} className="btn-ghost flex-1 py-2">CANCEL</button>
-              <button onClick={confirmImport} disabled={importLoading} className="btn-primary flex-1 py-2">
-                {importLoading ? "IMPORTING..." : `IMPORT ${importData.length} ROWS`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Credentials table */}
       <div className="flex-1 overflow-y-auto">
