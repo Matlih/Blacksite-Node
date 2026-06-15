@@ -75,7 +75,7 @@ The frontend registers a `visibilitychange` event listener. When the window is h
 
 ### The Duress Protocol (Canary Passphrase)
 
-During vault initialization, the system generates two cryptographically independent 5-word passphrases:
+During vault initialization, the system generates two cryptographically independent passphrases:
 
 - **Master Passphrase** — unlocks the vault and decrypts all stored credentials.
 - **Canary Passphrase** — triggers silent vault destruction and opens a decoy empty session.
