@@ -7,6 +7,12 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 
+export interface PasswordHistoryEntry {
+  password: string;
+  created_at: number;
+  retired_at: number;
+}
+
 export interface CredentialEntry {
   id: string;
   service: string;
@@ -15,6 +21,8 @@ export interface CredentialEntry {
   notes: string;
   created_at: number;
   updated_at: number;
+  password_history: PasswordHistoryEntry[];
+  category?: string;
 }
 
 export interface VaultStatus {
@@ -22,6 +30,7 @@ export interface VaultStatus {
   is_unlocked: boolean;
   failed_attempts: number;
   lockout_remaining_secs: number;
+  is_corrupted: boolean;
 }
 
 /** Returns vault existence + lock state. Call on every mount. */
@@ -62,9 +71,22 @@ export async function addCredential(
   service: string,
   username: string,
   password: string,
-  notes: string
+  notes: string,
+  category?: string
 ): Promise<string> {
-  return invoke<string>("add_credential", { service, username, password, notes });
+  return await invoke("add_credential", { service, username, password, notes, category });
+}
+
+/** Edits a credential by ID, pushes old password to history if changed, and re-encrypts. */
+export async function editCredential(
+  id: string,
+  service: string,
+  username: string,
+  password: string,
+  notes: string,
+  category?: string
+): Promise<void> {
+  await invoke("edit_credential", { id, service, username, password, notes, category });
 }
 
 /** Removes a credential by ID and immediately re-encrypts. */
@@ -72,12 +94,37 @@ export async function deleteCredential(id: string): Promise<void> {
   return invoke<void>("delete_credential", { id });
 }
 
-/** Generates a fresh Diceware passphrase (without creating a vault). */
-export async function generatePassphrase(): Promise<string> {
-  return invoke<string>("generate_passphrase");
+/** Deletes a password history entry for a given credential ID. */
+export async function deleteHistoryEntry(id: string, retiredAt: number): Promise<void> {
+  return invoke<void>("delete_history_entry", { id, retiredAt });
+}
+
+/** Generates a fresh Diceware passphrase. */
+export async function generatePassphrase(wordCount: number, languages: string[]): Promise<string> {
+  return invoke<string>("generate_passphrase", { wordCount, languages });
 }
 
 /** Generates a high-entropy account password of the given length (12–128). */
 export async function generateSecurePassword(length?: number): Promise<string> {
   return invoke<string>("cmd_generate_secure_password", { length });
+}
+
+/** Exports the encrypted vault to a file. */
+export async function exportVault(exportPath: string): Promise<void> {
+  return invoke<void>("export_vault", { exportPath });
+}
+
+/** Imports an encrypted vault from a file. */
+export async function importVault(importPath: string, oldPassphrase: string): Promise<void> {
+  await invoke("import_vault", { importPath, oldPassphrase });
+}
+
+/** Securely copies text to the OS clipboard, bypassing clipboard history on Windows. */
+export async function secureCopy(text: string): Promise<void> {
+  await invoke("secure_copy", { text });
+}
+
+/** Gets the application version. */
+export async function getAppVersion(): Promise<string> {
+  return invoke<string>("get_app_version");
 }

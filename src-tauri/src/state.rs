@@ -109,4 +109,5 @@ pub struct VaultStatus {
     pub is_unlocked: bool,
     pub failed_attempts: u32,
     pub lockout_remaining_secs: u64,
+    pub is_corrupted: bool,
 }

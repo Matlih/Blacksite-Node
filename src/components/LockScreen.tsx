@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Lock, AlertTriangle, Eye, EyeOff } from "lucide-react";
-import { unlockVault, getVaultStatus } from "../lib/tauri";
+import { AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { unlockVault, getVaultStatus, getAppVersion } from "../lib/tauri";
+import { MinimalLineLoader } from "./MinimalLineLoader";
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -19,8 +20,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const [failedAttempts, setFailedAttempts] = useState(initialFailedAttempts);
   const [lockoutSecs, setLockoutSecs] = useState(initialLockoutSecs);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("0.1.0");
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    getAppVersion().then(setAppVersion).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (lockoutSecs > 0) {
@@ -76,11 +82,12 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const isLocked = lockoutSecs > 0;
 
   return (
-    <div className="flex flex-col h-full bg-gunmetal-900 text-slate-text font-mono">
+    <div className="flex flex-col h-full bg-gunmetal-900 text-slate-text font-mono relative">
+      {loading && <MinimalLineLoader text="AUTHORIZING" />}
+      
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-gunmetal-800 border-b border-ops-700">
         <div className="flex items-center gap-3">
-          <img src="/app_logo.png" alt="Blacksite Node" className="h-6 w-auto object-contain" />
           <span className="text-xs uppercase tracking-widest text-slate-dim">
             BLACKSITE NODE — AUTHENTICATION REQUIRED
           </span>
@@ -91,11 +98,12 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       </div>
 
       <div className="flex flex-col items-center justify-center flex-1 px-8 max-w-xl mx-auto w-full">
-        {/* Lock icon */}
-        <div className="mb-8">
-          <Lock
-            size={48}
-            className={`${isLocked ? "text-amber-warn" : "text-slate-dim"} transition-colors`}
+        {/* Main Logo */}
+        <div className="mb-8 flex justify-center items-center">
+          <img 
+            src="/app_logo.png" 
+            alt="Blacksite Node" 
+            className={`w-24 h-24 object-contain transition-all duration-500 ${isLocked ? "grayscale opacity-50 drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]" : "drop-shadow-[0_0_15px_rgba(56,189,248,0.2)]"}`} 
           />
         </div>
 
@@ -206,7 +214,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         </button>
 
         <div className="mt-6 text-xs text-slate-label text-center leading-relaxed">
-          Argon2id · ChaCha20-Poly1305 · CSPRNG · Zero-knowledge
+          Argon2id · ChaCha20-Poly1305 · CSPRNG · Zero-knowledge<br/>
+          v{appVersion}
         </div>
       </div>
     </div>

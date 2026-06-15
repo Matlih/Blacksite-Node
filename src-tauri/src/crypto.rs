@@ -30,6 +30,8 @@ use std::fs;
 use std::path::PathBuf;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+use base64::prelude::*;
+
 
 // ---------------------------------------------------------------------------
 // Constants — Argon2id hardening parameters
@@ -95,207 +97,8 @@ pub struct DuressBlob {
 /// Entropy per word: log2(wordlist_size). With 7,776+ words: ~12.9 bits/word.
 /// 5-word passphrase entropy: ~64.5 bits — sufficient against online attacks
 /// and meaningful resistance against offline attacks when combined with Argon2id.
-static DICEWARE_WORDS: &[&str] = &[
-    // --- English EFF Long List (representative subset, ASCII-clean) ---
-    "abacus", "abdomen", "abide", "ability", "ablaze", "aboard", "abode",
-    "abolish", "abrupt", "absence", "abstract", "abyss", "academy", "accent",
-    "acclaim", "account", "accrue", "accused", "achieve", "acid", "action",
-    "active", "actual", "adapter", "address", "adhere", "adjoin", "adjust",
-    "admiral", "advance", "adverse", "affirm", "afford", "afraid", "agenda",
-    "agent", "agile", "agony", "agreed", "ahead", "aiding", "airfield",
-    "airlock", "airtight", "alarm", "album", "alert", "algebra", "alien",
-    "align", "alkali", "allot", "allow", "alloy", "alpine", "altar",
-    "alter", "ambush", "ample", "anchor", "ancient", "angle", "animal",
-    "annex", "annual", "anvil", "aorta", "apex", "apology", "appeal",
-    "armor", "arrow", "arsenal", "atlas", "atom", "atone", "audit",
-    "augment", "authority", "axiom", "azure",
-    "backlog", "ballast", "barrier", "bastion", "battery", "beacon",
-    "bedrock", "binder", "biome", "bishop", "blade", "blank", "blaze",
-    "blight", "blunt", "border", "brace", "branch", "breach", "brief",
-    "brigade", "brisk", "broker", "bruise", "bulwark", "bunker", "burden",
-    "cable", "cadence", "camel", "camera", "canopy", "captain", "carbon",
-    "cargo", "castle", "catalyst", "cavern", "cellar", "chain", "chamber",
-    "chapter", "charge", "chrome", "cipher", "circuit", "citadel", "clamp",
-    "clarity", "clause", "clearance", "climate", "cluster", "coarse", "cobalt",
-    "cohort", "comet", "command", "compact", "compass", "concrete", "conduit",
-    "conflict", "control", "convoy", "copper", "cordite", "cortex", "covert",
-    "crater", "crest", "critic", "crossbow", "crypt", "current", "cutoff",
-    "dagger", "damage", "dark", "datum", "debris", "decode", "defend",
-    "delta", "dense", "deploy", "detect", "device", "digit", "dioxin",
-    "disarm", "discord", "dispatch", "domain", "domino", "dragon", "dredge",
-    "drift", "driven", "dropzone", "drum", "durable", "dynamic",
-    "eagle", "earmark", "earth", "eclipse", "edge", "effort", "egress",
-    "elapse", "embargo", "ember", "emerge", "emitter", "encode", "encrypt",
-    "endure", "enforce", "engine", "entry", "envoy", "epoch", "erode",
-    "escape", "evolve", "exact", "exile", "expose", "extend", "extract",
-    "fabric", "factor", "falcon", "fathom", "fiber", "field", "filter",
-    "final", "fissure", "fixed", "flank", "flashpoint", "flint", "flotilla",
-    "focal", "forage", "force", "forge", "formal", "forward", "fossil",
-    "fracture", "fragment", "frame", "frigid", "front", "fulcrum", "fusion",
-    "gamma", "garrison", "gate", "gauge", "ghost", "glyph", "gorge",
-    "grade", "granite", "graph", "grid", "grip", "grotto", "ground",
-    "grove", "guardian", "guidance", "guise", "gulf", "gunmetal",
-    "harden", "harness", "hazard", "heavy", "height", "helix", "helm",
-    "hidden", "hierarchy", "hold", "hollow", "horizon", "hostile", "hybrid",
-    "impact", "index", "inert", "inferno", "ingress", "inlaid", "input",
-    "inspect", "install", "intake", "inter", "invoke", "iron", "isolate",
-    "javelin", "joint", "judge", "junior", "jurisdiction",
-    "kernel", "kinetic", "knoll", "known",
-    "labyrinth", "lance", "latch", "lattice", "launch", "layer", "ledger",
-    "legacy", "lens", "level", "lever", "limit", "link", "lithic", "loader",
-    "locus", "logic", "lookup", "lumen",
-    "magnetic", "mantle", "margin", "marker", "matrix", "measure", "medium",
-    "merge", "mesh", "method", "migrate", "mirror", "mission", "model",
-    "module", "monitor", "morse", "mortar", "motion", "motor", "mount",
-    "neural", "nexus", "node", "noise", "north", "notch",
-    "object", "offset", "opera", "optic", "orbit", "order", "origin",
-    "output", "oxide",
-    "parcel", "patrol", "payload", "perimeter", "phase", "pilot", "pinion",
-    "pivot", "plasma", "platform", "pointer", "portal", "posture", "power",
-    "primer", "probe", "process", "proton", "proxy", "pulse",
-    "quartz", "query", "queue",
-    "radar", "radius", "rally", "ramp", "range", "rapid", "ratio", "recon",
-    "record", "relay", "remote", "repair", "report", "resist", "resource",
-    "retract", "rigid", "rivet", "rocket", "rotate", "route", "rupture",
-    "salvo", "scalar", "sector", "secure", "sensor", "series", "shield",
-    "signal", "silo", "slate", "socket", "sonar", "sphere", "stable",
-    "stark", "static", "status", "steel", "stealth", "storm", "strand",
-    "summit", "supply", "surge", "symbol", "synapse", "syntax",
-    "tablet", "target", "tether", "thermal", "thrust", "timber", "token",
-    "tower", "trace", "track", "transit", "trench", "trigger", "tungsten",
-    "turret", "ultra", "unique", "unit", "uplink", "uptime",
-    "vacuum", "valve", "vector", "velocity", "vertex", "voltage",
-    "warden", "watchdog", "water", "wedge", "weight", "winch", "wireless",
-    "xenon", "yield", "zenith", "zero", "zone",
-    // --- Spanish (ASCII-normalized: no accents, no special chars) ---
-    "accion", "aguja", "aire", "alarma", "alba", "alcoba", "aldea", "aleta",
-    "alga", "alma", "almena", "almo", "alpino", "alto", "ambar", "amigo",
-    "ancla", "antena", "anual", "arbol", "arco", "arma", "armada", "arpa",
-    "asalto", "asedio", "astro", "ataque", "atico", "audio", "aurora",
-    "avance", "avion", "azul",
-    "bahia", "bala", "banca", "banda", "bandera", "base", "batalla",
-    "borde", "bosque", "brecha", "brillo", "bruma", "bulto", "buque",
-    "cabeza", "cadena", "calor", "campo", "canal", "carga", "casco",
-    "catedral", "caudal", "celda", "choque", "claro", "clase", "codigo",
-    "colina", "coloso", "comando", "cometa", "compas", "consejo",
-    "corriente", "corte", "costa", "cripta", "cuartel", "cubrir",
-    "dardo", "defensa", "desierto", "destino", "dique", "disco", "dominio",
-    "eco", "efecto", "emboscada", "empuje", "enclave", "esfera", "espada",
-    "espejo", "esquema", "estacion", "estrella", "exacto", "exilio",
-    "faro", "fibra", "flecha", "flota", "forja", "fortin", "fotón",
-    "fragua", "frente", "fuego", "fuerza",
-    "golfo", "grano", "grave", "grupo", "guerra", "guia",
-    "herramienta", "hito", "hoja", "horizonte",
-    "impulso", "indicio", "informe", "inicio", "isla",
-    "jefe", "joroba", "juego", "junta",
-    "lanza", "largo", "laser", "latido", "lazo", "limite", "linea",
-    "logro", "lucha", "luna",
-    "macro", "marca", "mando", "mapa", "marea", "masa", "matiz",
-    "mega", "metal", "mision", "mitad", "modo", "motor", "mundo",
-    "nicho", "nivel", "nombre", "norte", "nota", "nube",
-    "onda", "orbita", "orden", "otono",
-    "palanca", "pantalla", "pasaje", "patio", "pausa", "penal",
-    "pilar", "pista", "plasma", "playa", "poste", "primo", "prisma",
-    "profundo", "pulso", "punto",
-    "radar", "radio", "rasgo", "recon", "red", "refuerzo", "ruta",
-    "salida", "salvo", "senal", "sierra", "silo", "sistema", "solar",
-    "sombra", "tarea", "terreno", "tiempo", "tierra", "tiro", "titulo",
-    "trazo", "tregua", "turno",
-    "umbral", "unidad", "urbano",
-    "valor", "vapor", "vector", "velocidad", "verdad", "viaje", "vista",
-    "zona",
-    // --- Filipino / Tagalog (ASCII-normalized) ---
-    "abot", "agos", "agaw", "agom", "aklat", "alab", "alaga", "alam",
-    "alay", "alerto", "algasal", "alin", "aliwan", "almusal", "alon",
-    "alwan", "ambon", "ambush", "ampon", "amuki", "andar", "anino",
-    "antas", "antay", "anyaya", "aral", "aralan", "arkila", "armas",
-    "atake", "ayos", "ayuda",
-    "bago", "bala", "balak", "baling", "balmik", "bansa", "banta",
-    "bantay", "banwa", "baon", "base", "batalyon", "bato", "bayani",
-    "bigwas", "bilis", "biro", "bitag", "bituin", "biyaya", "bloke",
-    "boses", "bugso", "bukas", "bukid", "bula", "bulto", "bundok",
-    "bunga", "buntot", "buwis",
-    "daloy", "dambana", "dampi", "dangal", "datos", "dawit", "dayag",
-    "dayap", "dedikado", "digma", "dila", "dilig", "disenyo", "dito",
-    "doon", "dumog", "dunong", "duplo",
-    "galing", "ganap", "galaw", "gampan", "gawa", "gilid", "gipit",
-    "giro", "gisingin", "gripo", "grupo", "guhit",
-    "handa", "handog", "hangin", "harang", "hardin", "hatol", "hawak",
-    "higpit", "hilaga", "hilaw", "hiling", "hinto", "hiram", "hulas",
-    "humanga", "humiwalay",
-    "ilaw", "imbak", "inang", "ingat", "ipakita", "isip", "itago",
-    "iyon",
-    "kahon", "kalis", "kapit", "katad", "katipan", "katol", "kaya",
-    "kilos", "kisig", "kita", "klima", "kodigo", "kolum", "kontra",
-    "krus", "kulayan", "kulay", "kulob", "kumilos", "kunan", "kupkop",
-    "lakas", "laban", "labing", "lagda", "laglag", "laging", "lagom",
-    "lakas", "lakad", "larangan", "larawan", "laya", "lihim", "likas",
-    "limot", "linis", "listo", "loda", "lunan", "lupit",
-    "mabilis", "madilim", "mahal", "maigting", "malakas", "malapit",
-    "malaya", "maliit", "malinis", "mandirigma", "mapa", "marami",
-    "masid", "matag", "matuod", "meron", "mesa", "mismo", "moog",
-    "mukha", "mundo", "musika",
-    "nayon", "ngayon", "nino", "nito",
-    "obra", "orden", "ospital",
-    "pag-asa", "paglaban", "pagod", "pagtanggap", "paikot", "palakas",
-    "pananaw", "panganib", "papel", "pasok", "patakbo", "patrol",
-    "payo", "pilar", "pinto", "piraso", "plano", "poso", "presyo",
-    "pulang", "pulis", "pulso", "punto", "puso", "putol",
-    "radyo", "rali", "rason", "rason", "rayna", "rebelde", "rekta",
-    "relo", "reporte", "ruta",
-    "sabog", "sagot", "sahig", "saklolo", "saksak", "saludo", "samahan",
-    "sandali", "sandatahan", "sarili", "saya", "senyas", "sereno",
-    "sibat", "sigaw", "sigla", "siguro", "sikap", "silid", "simbahan",
-    "sistema", "siyang", "soldado", "sorpresa", "suntok",
-    "takbo", "takot", "talab", "talaksan", "tali", "talim", "tama",
-    "tanggol", "tawid", "tayo", "tigil", "tiyak", "tono", "traydor",
-    "tubig", "tulong", "tunog", "tupok",
-    "ulap", "ulit", "utos",
-    "wasto", "watawat", "wika",
-    "yaman", "yugto",
-    // --- Italian (ASCII-normalized: no accents) ---
-    "acqua", "aereo", "affondo", "agente", "agosto", "allarme", "altezza",
-    "amico", "ancora", "angolo", "anime", "antro", "arco", "ardore",
-    "argine", "arma", "armeria", "armistizio", "arresa", "assalto",
-    "atlante", "attacco", "avanzata", "avviso",
-    "balestra", "baluardo", "banda", "barriera", "bastione", "batteria",
-    "blocco", "bombe", "bosco", "breccia", "brigata",
-    "cadenza", "capo", "cartina", "castello", "cavaliere", "cavo",
-    "centro", "chiave", "cintura", "codice", "colpo", "colonna",
-    "combattente", "comando", "confine", "consolle", "convoglio",
-    "coperta", "corazza", "corrente", "cretto", "croce", "cuneo",
-    "dardo", "dato", "decidere", "difesa", "diga", "direzione", "disco",
-    "domino", "drago",
-    "echi", "effetto", "emblema", "enclave", "enigma", "entrata",
-    "eroi", "esplosione", "esposizione",
-    "fascia", "ferro", "fibra", "fiamma", "fissare", "flotta", "forza",
-    "fortino", "freccia", "fronte", "fucile", "fuoco", "furtivo",
-    "gancio", "garanzia", "ghiaccio", "grafica", "granato", "gravita",
-    "grido", "grumo", "guanto", "guida", "guerra",
-    "impatto", "impulso", "incendio", "indagine", "indizio", "ingresso",
-    "intercettare", "intesa", "invasione",
-    "lancia", "latitudine", "latere", "leva", "limite", "linea",
-    "logica", "lotta", "luna", "luogo",
-    "macchina", "mappa", "marina", "martello", "matrice", "meccanismo",
-    "medaglia", "metallo", "mira", "missione", "modello", "motore",
-    "nascondere", "nebbia", "nemico", "nervo", "nodo", "nome", "nord",
-    "nota", "novita",
-    "obiettivo", "onda", "orbita", "ordine", "ostile",
-    "pattuglia", "pericolo", "peso", "pila", "piombo", "pistone",
-    "pistola", "plasma", "portata", "porta", "potere", "primo",
-    "proiettile", "protezione", "punto",
-    "radar", "rado", "rapido", "razione", "regno", "relitto", "rete",
-    "rifugio", "rinforzo", "ritirata", "rotazione", "rotta",
-    "segnale", "sentinella", "settore", "sfida", "silo", "sistema",
-    "slancio", "soldato", "sorpresa", "sostegno", "spada", "squadra",
-    "stella", "striscia", "struttura",
-    "tattica", "tenuta", "terreno", "territorio", "tipo", "torre",
-    "traiettoria", "trappola", "trincea",
-    "unita", "urgenza", "urto",
-    "valore", "vapore", "vela", "velocita", "ventaglio", "vibrazione",
-    "vista", "vittoria", "vulcano",
-    "zaino", "zona",
-];
+// Dictionary removed in favor of multilingual lists in wordlists.rs
+
 
 // ---------------------------------------------------------------------------
 // Master Key — zeroized secure wrapper
@@ -316,10 +119,16 @@ pub struct MasterKey {
 // Vault data structures
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
+pub struct PasswordHistoryEntry {
+    pub password: String,
+    pub changed_at: u64,
+}
+
 /// A single credential entry stored in the vault.
 /// All fields are cleartext ONLY while the vault is decrypted in RAM.
 /// On disk, the entire `VaultData` collection is encrypted as one unit.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct CredentialEntry {
     pub id: String,
     pub service: String,
@@ -330,13 +139,17 @@ pub struct CredentialEntry {
     pub notes: String,
     pub created_at: u64,
     pub updated_at: u64,
+    #[serde(default)]
+    pub password_history: Vec<PasswordHistoryEntry>,
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 /// The decrypted vault payload serialized to/from JSON before encryption.
 /// The entire struct is treated as a single atomic plaintext blob — there is
 /// no partial encryption. Either the whole vault decrypts (correct key) or
 /// nothing does (wrong key → Poly1305 authentication failure).
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Zeroize, ZeroizeOnDrop)]
 pub struct VaultData {
     pub version: u8,
     pub entries: Vec<CredentialEntry>,
@@ -414,38 +227,47 @@ pub fn derive_key(passphrase: &str, salt: &[u8]) -> Result<MasterKey, String> {
 // Diceware Passphrase Generator
 // ---------------------------------------------------------------------------
 
-/// Generates a cryptographically random 5-word Diceware passphrase from the
-/// merged multilingual wordlist.
-///
-/// # Entropy analysis
-/// - Wordlist size: ~900+ unique sanitized words (representative subset).
-/// - Entropy per word: log₂(900) ≈ 9.8 bits.
-/// - 5-word passphrase: ≈ 49 bits minimum.
-/// - **NOTE**: For maximum entropy, deploy with the full EFF long list (7,776 words)
-///   which yields 12.9 bits/word × 5 = 64.5 bits per passphrase. This implementation
-///   uses the embedded subset; production deployments should load from file.
-///
-/// # CSPRNG
-/// Uses `OsRng` which pulls from the OS entropy source (Windows: `BCryptGenRandom`,
-/// Linux: `getrandom(2)`). Never uses `thread_rng()` or seeded PRNGs for key material.
-pub fn generate_diceware_passphrase() -> String {
-    let word_count = DICEWARE_WORDS.len();
-    let mut rng = OsRng;
-    let mut words = Vec::with_capacity(5);
+pub fn generate_diceware_passphrase(word_count: usize, languages: &[String]) -> String {
+    let mut words_list: Vec<&[&str]> = Vec::new();
 
-    for _ in 0..5 {
-        // Rejection sampling to eliminate modulo bias.
-        // We draw a u32 and reject values in the incomplete final group
-        // so that every word has exactly equal probability.
+    let langs_to_check = if languages.is_empty() {
+        vec!["english"]
+    } else {
+        languages.iter().map(|s| s.as_str()).collect()
+    };
+
+    for lang in langs_to_check {
+        match lang {
+            "english" => words_list.push(crate::wordlists::ENGLISH_WORDS),
+            "spanish" => words_list.push(crate::wordlists::SPANISH_WORDS),
+            "french" => words_list.push(crate::wordlists::FRENCH_WORDS),
+            "italian" => words_list.push(crate::wordlists::ITALIAN_WORDS),
+            "portuguese" => words_list.push(crate::wordlists::PORTUGUESE_WORDS),
+            "czech" => words_list.push(crate::wordlists::CZECH_WORDS),
+            _ => {}
+        }
+    }
+
+    if words_list.is_empty() {
+        words_list.push(crate::wordlists::ENGLISH_WORDS);
+    }
+
+    let mut rng = OsRng;
+    let mut words = Vec::with_capacity(word_count);
+
+    for _ in 0..word_count {
+        let list_idx = (rng.next_u32() as usize) % words_list.len();
+        let list = words_list[list_idx];
+        let count = list.len();
+
         let index = loop {
             let raw = rng.next_u32() as usize;
-            // Rejection threshold: largest multiple of word_count ≤ u32::MAX+1
-            let threshold = (u32::MAX as usize + 1) - (u32::MAX as usize + 1) % word_count;
+            let threshold = (u32::MAX as usize + 1) - (u32::MAX as usize + 1) % count;
             if raw < threshold {
-                break raw % word_count;
+                break raw % count;
             }
         };
-        words.push(DICEWARE_WORDS[index]);
+        words.push(list[index]);
     }
 
     words.join("-")
@@ -525,7 +347,12 @@ pub fn encrypt_vault(
     let json = serde_json::to_string_pretty(&vault_file)
         .map_err(|e| format!("Vault serialize error: {e}"))?;
 
-    fs::write(vault_path, json).map_err(|e| format!("Vault write error: {e}"))?;
+    let tmp_path = vault_path.with_extension("blacksite.tmp");
+    fs::write(&tmp_path, json).map_err(|e| format!("Vault write error: {e}"))?;
+    fs::rename(&tmp_path, vault_path).map_err(|e| {
+        let _ = fs::remove_file(&tmp_path);
+        format!("Vault atomic rename error: {e}")
+    })?;
 
     Ok(())
 }
@@ -743,66 +570,10 @@ pub fn wipe_vault(vault_path: &PathBuf) -> Result<(), String> {
 // Internal helpers — minimal base64 without pulling in an external crate
 // ---------------------------------------------------------------------------
 
-const B64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
 fn base64_encode(input: &[u8]) -> String {
-    let mut out = String::new();
-    for chunk in input.chunks(3) {
-        let b0 = chunk[0] as usize;
-        let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as usize } else { 0 };
-        out.push(B64_CHARS[b0 >> 2] as char);
-        out.push(B64_CHARS[((b0 & 3) << 4) | (b1 >> 4)] as char);
-        if chunk.len() > 1 {
-            out.push(B64_CHARS[((b1 & 0xf) << 2) | (b2 >> 6)] as char);
-        } else {
-            out.push('=');
-        }
-        if chunk.len() > 2 {
-            out.push(B64_CHARS[b2 & 0x3f] as char);
-        } else {
-            out.push('=');
-        }
-    }
-    out
+    BASE64_STANDARD.encode(input)
 }
 
 fn base64_decode(input: &str) -> Result<Vec<u8>, &'static str> {
-    let chars: Vec<u8> = input.bytes().collect();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < chars.len() {
-        let c0 = b64_val(chars[i])?;
-        let c1 = b64_val(chars[i + 1])?;
-        out.push((c0 << 2) | (c1 >> 4));
-        if i + 2 < chars.len() && chars[i + 2] != b'=' {
-            let c2 = b64_val(chars[i + 2])?;
-            out.push((c1 << 4) | (c2 >> 2));
-        }
-        if i + 3 < chars.len() && chars[i + 3] != b'=' {
-            let c3 = b64_val(chars[i + 3])?;
-            out.push((c2_for_last(&chars, i) << 6) | c3);
-        }
-        i += 4;
-    }
-    Ok(out)
-}
-
-fn b64_val(c: u8) -> Result<u8, &'static str> {
-    match c {
-        b'A'..=b'Z' => Ok(c - b'A'),
-        b'a'..=b'z' => Ok(c - b'a' + 26),
-        b'0'..=b'9' => Ok(c - b'0' + 52),
-        b'+' => Ok(62),
-        b'/' => Ok(63),
-        _ => Err("Invalid base64 character"),
-    }
-}
-
-fn c2_for_last(chars: &[u8], i: usize) -> u8 {
-    if i + 2 < chars.len() && chars[i + 2] != b'=' {
-        b64_val(chars[i + 2]).unwrap_or(0)
-    } else {
-        0
-    }
+    BASE64_STANDARD.decode(input).map_err(|_| "Invalid base64 string")
 }

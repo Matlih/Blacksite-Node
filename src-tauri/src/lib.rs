@@ -3,16 +3,18 @@
 mod crypto;
 mod security;
 mod state;
+mod wordlists;
 
 use state::{AppState, Session, VaultState, VaultStatus};
 use crate::crypto::{
-    create_duress_blob, decrypt_vault, derive_key, encrypt_vault, generate_diceware_passphrase,
+    create_duress_blob, decrypt_vault, derive_key, encrypt_vault,
     generate_salt, generate_secure_password, read_duress_blob, read_vault_salt,
-    try_decrypt_duress, vault_exists, wipe_vault, CredentialEntry, VaultData,
+    try_decrypt_duress, vault_exists, wipe_vault, CredentialEntry, PasswordHistoryEntry, VaultData,
 };
 use tauri::{Manager, State};
 use tokio::sync::Mutex;
 use std::time::SystemTime;
+use rand::{rngs::OsRng, RngCore};
 
 // ---------------------------------------------------------------------------
 // setup_vault
@@ -68,11 +70,29 @@ async fn setup_vault(
 #[tauri::command]
 async fn get_vault_status(state: State<'_, VaultState>) -> Result<VaultStatus, String> {
     let app_state = state.lock().await;
+    let exists = vault_exists(&app_state.vault_path);
+    let mut is_corrupted = false;
+
+    if exists {
+        if let Ok(content) = std::fs::read_to_string(&app_state.vault_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if json.get("magic").and_then(|v| v.as_str()) != Some("BLACKSITE_NODE_v1") {
+                    is_corrupted = true;
+                }
+            } else {
+                is_corrupted = true;
+            }
+        } else {
+            is_corrupted = true;
+        }
+    }
+
     Ok(VaultStatus {
-        vault_exists: vault_exists(&app_state.vault_path),
+        vault_exists: exists,
         is_unlocked: app_state.is_unlocked(),
         failed_attempts: app_state.rate_limiter.failed_count(),
         lockout_remaining_secs: app_state.rate_limiter.remaining_lockout_secs(),
+        is_corrupted,
     })
 }
 
@@ -211,6 +231,7 @@ async fn add_credential(
     username: String,
     password: String,
     notes: String,
+    category: Option<String>,
     state: State<'_, VaultState>,
 ) -> Result<String, String> {
     let mut app_state = state.lock().await;
@@ -219,8 +240,9 @@ async fn add_credential(
 
     // In a duress session the vault file is gone — silently succeed
     if session.is_duress {
-        let id = format!("{:x}", service.len() as u64 * 31);
-        return Ok(id);
+        let mut id_bytes = [0u8; 16];
+        OsRng.fill_bytes(&mut id_bytes);
+        return Ok(hex::encode(id_bytes));
     }
 
     let now = SystemTime::now()
@@ -228,7 +250,9 @@ async fn add_credential(
         .unwrap_or_default()
         .as_secs();
 
-    let id = format!("{:x}", now ^ (service.len() as u64 * 31));
+    let mut id_bytes = [0u8; 16];
+    OsRng.fill_bytes(&mut id_bytes);
+    let id = hex::encode(id_bytes);
 
     let entry = CredentialEntry {
         id: id.clone(),
@@ -238,6 +262,8 @@ async fn add_credential(
         notes,
         created_at: now,
         updated_at: now,
+        password_history: Vec::new(),
+        category,
     };
 
     session.vault_data.entries.push(entry);
@@ -298,13 +324,112 @@ async fn delete_credential(id: String, state: State<'_, VaultState>) -> Result<(
     Ok(())
 }
 
+
+// ---------------------------------------------------------------------------
+// edit_credential
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn edit_credential(
+    id: String,
+    service: String,
+    username: String,
+    password: String,
+    notes: String,
+    category: Option<String>,
+    state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let mut app_state = state.lock().await;
+
+    let session = app_state.session.as_mut().ok_or("Vault is locked.")?;
+
+    if session.is_duress {
+        return Ok(());
+    }
+
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let entry = session.vault_data.entries.iter_mut().find(|e| e.id == id).ok_or("Entry not found.")?;
+
+    if entry.password != password {
+        entry.password_history.push(PasswordHistoryEntry {
+            password: entry.password.clone(),
+            changed_at: now,
+        });
+    }
+
+    entry.service = service;
+    entry.username = username;
+    entry.password = password;
+    entry.notes = notes;
+    entry.category = category;
+    entry.updated_at = now;
+
+    let salt_bytes = read_vault_salt(&app_state.vault_path)?;
+    let mut salt_arr = [0u8; 16];
+    let copy_len = salt_bytes.len().min(16);
+    salt_arr[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);
+
+    let duress_blob = app_state.duress_blob.clone();
+    let session = app_state.session.as_ref().ok_or("Vault is locked.")?;
+    encrypt_vault(
+        &session.vault_data,
+        &session.master_key,
+        &app_state.vault_path,
+        &salt_arr,
+        duress_blob.as_ref(),
+    )?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// delete_history_entry
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn delete_history_entry(
+    id: String,
+    changed_at: u64,
+    state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let mut app_state = state.lock().await;
+    let session = app_state.session.as_mut().ok_or("Vault is locked.")?;
+    if session.is_duress {
+        return Ok(());
+    }
+    
+    let entry = session.vault_data.entries.iter_mut().find(|e| e.id == id).ok_or("Entry not found.")?;
+    entry.password_history.retain(|h| h.changed_at != changed_at);
+
+    let salt_bytes = read_vault_salt(&app_state.vault_path)?;
+    let mut salt_arr = [0u8; 16];
+    let copy_len = salt_bytes.len().min(16);
+    salt_arr[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);
+
+    let duress_blob = app_state.duress_blob.clone();
+    let session = app_state.session.as_ref().ok_or("Vault is locked.")?;
+    encrypt_vault(
+        &session.vault_data,
+        &session.master_key,
+        &app_state.vault_path,
+        &salt_arr,
+        duress_blob.as_ref(),
+    )?;
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // generate_passphrase
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-async fn generate_passphrase() -> Result<String, String> {
-    Ok(generate_diceware_passphrase())
+async fn generate_passphrase(word_count: usize, languages: Vec<String>) -> Result<String, String> {
+    Ok(crate::crypto::generate_diceware_passphrase(word_count, &languages))
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +442,118 @@ async fn cmd_generate_secure_password(length: Option<usize>) -> Result<String, S
     Ok(generate_secure_password(len))
 }
 
+
+// ---------------------------------------------------------------------------
+// get_app_version
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn get_app_version() -> Result<String, String> {
+    Ok(env!("CARGO_PKG_VERSION").to_string())
+}
+
+// ---------------------------------------------------------------------------
+// export_vault
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn export_vault(export_path: String, state: State<'_, VaultState>) -> Result<(), String> {
+    let app_state = state.lock().await;
+    let session = app_state.session.as_ref().ok_or("Vault is locked.")?;
+    
+    if session.is_duress {
+        return Err("Cannot export from a duress session.".to_string());
+    }
+
+    let salt = generate_salt();
+    encrypt_vault(
+        &session.vault_data,
+        &session.master_key,
+        &std::path::PathBuf::from(export_path),
+        &salt,
+        None, // No duress blob in exported file
+    )?;
+    
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// import_vault
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn import_vault(
+    import_path: String,
+    old_passphrase: String,
+    state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let path = std::path::PathBuf::from(import_path);
+    if !vault_exists(&path) {
+        return Err("Export file not found.".to_string());
+    }
+
+    let salt = read_vault_salt(&path)?;
+    let old_key = derive_key(&old_passphrase, &salt)?;
+    let imported_vault = decrypt_vault(&old_key, &path)?;
+
+    let mut app_state = state.lock().await;
+    let session = app_state.session.as_mut().ok_or("Vault is locked.")?;
+    
+    if session.is_duress {
+        return Err("Cannot import into a duress session.".to_string());
+    }
+
+    // Merge entries
+    for mut imported_entry in imported_vault.entries.clone() {
+        // Regenerate IDs to avoid collisions
+        let mut id_bytes = [0u8; 16];
+        OsRng.fill_bytes(&mut id_bytes);
+        imported_entry.id = hex::encode(id_bytes);
+        session.vault_data.entries.push(imported_entry);
+    }
+
+    // Re-encrypt the current vault
+    let salt_bytes = read_vault_salt(&app_state.vault_path)?;
+    let mut salt_arr = [0u8; 16];
+    let copy_len = salt_bytes.len().min(16);
+    salt_arr[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);
+
+    let duress_blob = app_state.duress_blob.clone();
+    let session = app_state.session.as_ref().unwrap();
+    encrypt_vault(
+        &session.vault_data,
+        &session.master_key,
+        &app_state.vault_path,
+        &salt_arr,
+        duress_blob.as_ref(),
+    )?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// secure_copy
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn secure_copy(text: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if text.is_empty() {
+            if let Ok(_clip) = clipboard_win::Clipboard::new_attempts(10) {
+                let _ = clipboard_win::raw::empty();
+            }
+        } else {
+            let _ = clipboard_win::set_clipboard_string(&text);
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("Secure copy is only implemented on Windows.".to_string())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tauri application entry point
 // ---------------------------------------------------------------------------
@@ -325,6 +562,7 @@ async fn cmd_generate_secure_password(length: Option<usize>) -> Result<String, S
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -348,8 +586,14 @@ pub fn run() {
             get_credentials,
             add_credential,
             delete_credential,
+            edit_credential,
+            delete_history_entry,
             generate_passphrase,
             cmd_generate_secure_password,
+            get_app_version,
+            export_vault,
+            import_vault,
+            secure_copy,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -6,7 +6,24 @@ CLASSIFICATION : PERSONAL SECURITY INFRASTRUCTURE
 ARCHITECTURE   : Tauri v2 · Rust · React · TypeScript · Vite · TailwindCSS
 CIPHER SUITE   : Argon2id · ChaCha20-Poly1305 · OsRng CSPRNG
 STORAGE        : Single encrypted .blacksite file — zero cloud, zero sync, zero trust
+VERSION        : v1.0.1
 ```
+
+---
+
+## I. FEATURES OVERVIEW
+
+- **Zero-Knowledge Architecture:** No cloud, no sync, no accounts. 
+- **Duress Protocol:** Canary passphrase triggers silent wipe and ghost session.
+- **Inactivity Auto-Lock:** Configurable (1, 5, 10, 15, 30 minutes).
+- **Secure Native Clipboard:** Fast native OS API clipboard with reliable 30-second local auto-clear.
+- **Vault Integrity Checks:** Detects corrupted or tampered vault files via magic headers.
+- **Password History:** Tracks and stores previous passwords to prevent reuse.
+- **Categories:** Organize credentials using pre-made or custom categories.
+- **ML Password Strength:** Evaluates entropy and calculates password strength dynamically.
+- **Data Portability:** Full support for CSV Import and encrypted `.bsx` Export.
+- **Cross-Platform Readiness:** Tauri v2 architecture allows seamless compilation to Android APKs.
+- **Immersive UI:** Minimalist cryptographic "Iris Shutter" lock and Hex-Line decryption animations.
 
 ---
 
@@ -329,12 +346,12 @@ https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 | Vault encryption | ChaCha20-Poly1305 AEAD, 256-bit key, random 96-bit nonce per write. |
 | Key derivation | Argon2id, 64 MiB / 3 iterations / 1 lane. |
 | Nonce reuse | Impossible — OsRng generates a fresh nonce for every `encrypt_vault()` call. |
-| Tamper detection | Poly1305 MAC verified before any plaintext is released. |
+| Tamper detection | Poly1305 MAC verified before any plaintext is released. Magic header verification. |
 | Brute-force defense | Argon2id memory hardness + exponential backoff rate limiter. |
 | Coercion defense | Canary Passphrase triggers silent wipe + ghost session. |
 | Network exposure | Zero. No sockets. No telemetry. No cloud. Tauri allows no outbound connections. |
-| Clipboard hygiene | Passwords auto-cleared from clipboard after 30 seconds. |
-| Idle exposure | Lock-on-hide via Page Visibility API. Key zeroized on minimize. |
+| Clipboard hygiene | Excluded from Windows Clipboard History (Win + V) and auto-cleared after 30s. |
+| Idle exposure | Configurable inactivity auto-lock (1-30 mins) + Lock-on-hide via Page Visibility API. |
 
 ---
 

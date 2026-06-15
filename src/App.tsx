@@ -19,7 +19,7 @@ import { SetupView } from "./components/SetupView";
 import { LockScreen } from "./components/LockScreen";
 import { VaultView } from "./components/VaultView";
 
-type AppView = "loading" | "setup" | "locked" | "vault";
+type AppView = "loading" | "setup" | "locked" | "vault" | "corrupted";
 
 interface LockState {
   failedAttempts: number;
@@ -38,6 +38,8 @@ export default function App() {
       const status = await getVaultStatus();
       if (!status.vault_exists) {
         setView("setup");
+      } else if (status.is_corrupted) {
+        setView("corrupted");
       } else if (status.is_unlocked) {
         setView("vault");
       } else {
@@ -104,6 +106,23 @@ export default function App() {
         initialFailedAttempts={lockState.failedAttempts}
         initialLockoutSecs={lockState.lockoutSecs}
       />
+    );
+  }
+
+  if (view === "corrupted") {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-gunmetal-900 text-slate-text p-8 text-center">
+        <h1 className="text-red-500 text-2xl font-bold mb-4 uppercase tracking-widest">Vault Corrupted</h1>
+        <p className="max-w-md text-slate-dim mb-8">
+          The vault file on this device has been tampered with or corrupted. The cryptographic integrity check failed.
+        </p>
+        <button 
+          onClick={() => setView("setup")} 
+          className="btn-primary bg-red-900 border-red-500 hover:bg-red-800"
+        >
+          Factory Reset Vault
+        </button>
+      </div>
     );
   }
 

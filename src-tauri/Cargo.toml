@@ -1,6 +1,6 @@
 [package]
 name = "blacksite-node"
-version = "0.1.0"
+version = "1.0.1"
 description = "Blacksite Node — Sovereign Offline Password Manager"
 authors = ["Blacksite Operator"]
 edition = "2021"
@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 # --- Tauri runtime ---
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
 
 # --- Serialization ---
 serde = { version = "1", features = ["derive"] }
@@ -58,3 +59,13 @@ zeroize = { version = "1", features = ["derive"] }
 
 # Unicode normalization for the multilingual Diceware sanitization pipeline.
 unicode-normalization = "0.1"
+
+# Base64 for vault file encoding
+base64 = "0.22"
+
+# Hex for ID generation
+hex = "0.4"
+
+# Windows Clipboard API for secure password copying (bypassing Win+V history)
+[target.'cfg(windows)'.dependencies]
+clipboard-win = "5.4"
