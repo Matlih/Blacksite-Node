@@ -21,7 +21,7 @@ VERSION        : v1.0.1
 - **Password History:** Tracks and stores previous passwords to prevent reuse.
 - **Categories:** Organize credentials using pre-made or custom categories.
 - **ML Password Strength:** Evaluates entropy and calculates password strength dynamically.
-- **Data Portability:** Full support for CSV Import and encrypted `.bsx` Export.
+- **Data Portability:** Native support for encrypted `.bsx` vault backups and cross-device imports.
 - **Cross-Platform Readiness:** Tauri v2 architecture allows seamless compilation to Android APKs.
 - **Immersive UI:** Minimalist cryptographic "Iris Shutter" lock and Hex-Line decryption animations.
 
@@ -124,6 +124,13 @@ The rate limiter is in-memory only. It does not persist to disk. A process resta
 
 The rate limiter operates as a complement to Argon2id, not a replacement. Combined, they reduce brute-force throughput from approximately 3 attempts per second (Argon2id alone on commodity hardware) to 1 attempt per minute at sustained maximum lockout.
 
+### Encrypted Data Portability (.bsx)
+
+Blacksite Node does not export to plaintext formats (like CSV) to prevent accidental data leakage to the local filesystem. Instead, all vault exports are saved in `.bsx` (Blacksite Export) format. 
+
+A `.bsx` file is identical in structure to the main `vault.blacksite` file. It is a full ChaCha20-Poly1305 encrypted JSON blob. 
+When importing a `.bsx` file on a new device, the user must provide the exact master passphrase used at the time the export was created. The Rust backend temporarily derives the old Argon2id key in memory, decrypts the `.bsx` payload, merges the entries into the active session, and immediately zeroizes the temporary key. The imported data is never written to disk until the active session is securely flushed using the current session's encryption key.
+
 ---
 
 ## III. THE CRYPTOGRAPHIC MATH
@@ -132,23 +139,26 @@ The rate limiter operates as a complement to Argon2id, not a replacement. Combin
 
 **The Diceware Passphrase System**
 
-Blacksite Node generates master and canary passphrases from a merged multilingual Diceware wordlist sourced from English (EFF Long List), Spanish, Filipino (Tagalog), and Italian — normalized through a Unicode NFD decomposition pipeline that strips all diacritical marks, enforces ASCII, and lowercases every word. The result is a clean, typeable, culturally diverse word pool of approximately **30,000 words**.
+Blacksite Node generates master and canary passphrases from a merged multilingual Diceware wordlist sourced from the BIP-39 standards: English, Spanish, French, Italian, Portuguese, and Czech — normalized through a Unicode NFD decomposition pipeline that strips all diacritical marks, enforces ASCII, and lowercases every word. The result is a clean, typeable, culturally diverse word pool of **12,288 words**.
 
-Each of the 5 passphrase words is selected independently using the OS CSPRNG (`OsRng`, backed by `BCryptGenRandom` on Windows, `getrandom(2)` on Linux) with rejection sampling to eliminate modulo bias. No word is weighted. No word is excluded from reuse.
+Each passphrase word is selected independently using the OS CSPRNG (`OsRng`, backed by `BCryptGenRandom` on Windows, `getrandom(2)` on Linux) with rejection sampling to eliminate modulo bias. No word is weighted. No word is excluded from reuse.
 
 **Combination Space**
 
+The user may select the cryptographic length of their passphrase during initialization. The exponential scaling of the Diceware engine provides the following entropies:
+
 ```
-Word pool  :  ~30,000 words
-Words      :  5 (selected independently with replacement)
-Total      :  30,000^5 = 2.43 × 10^22 possible passphrases
+Word pool           :  12,288 words
+Standard (5 words)  :  12,288^5 = 2.82 × 10^20 combinations
+Extended (8 words)  :  12,288^8 = 5.27 × 10^32 combinations
+Paranoid (12 words) :  12,288^12 = 1.18 × 10^49 combinations
 ```
 
-In context:
+In context (using the baseline Standard 5-word mode):
 
 ```
 Grains of sand on Earth       ≈  7.5 × 10^18
-Blacksite passphrase space    =  2.43 × 10^22   (≈ 3,240× more than grains of sand)
+Standard Blacksite Space      =  2.82 × 10^20   (≈ 37× more than grains of sand)
 ```
 
 **The Argon2id Bottleneck**
