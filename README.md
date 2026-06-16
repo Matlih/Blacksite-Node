@@ -13,7 +13,7 @@ STORAGE        : Single encrypted .blacksite file — zero cloud, zero sync, zer
 VERSION        : v1.0.1
 ```
 
-<div align="left">
+<div align="center">
   <h3>Support the Developer</h3>
   <a href="https://ko-fi.com/matlih">
     <img src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi" />
