@@ -23,7 +23,7 @@ VERSION        : v1.0.1
 <br>
 
 <div align="center">
-  <img src="src/assets/ui.png" alt="Blacksite Node Vault Interface" width="850"/>
+  <img src="public/ui.png" alt="Blacksite Node Vault Interface" width="850"/>
 </div>
 
 ---
