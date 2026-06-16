@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/app_icon.png" alt="Blacksite Node Logo" width="150"/>
+  <img src="public/app_logo.png" alt="Blacksite Node Logo" width="150"/>
   
   <h1>BLACKSITE NODE</h1>
   <h3>Sovereign Offline Password Manager</h3>
