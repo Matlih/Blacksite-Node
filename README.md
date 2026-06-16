@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/app_icon.png" alt="Blacksite Node Logo" width="150"/>
+  <img src="public/app_icon.png" alt="Blacksite Node Logo" width="150"/>
   
   <h1>BLACKSITE NODE</h1>
   <h3>Sovereign Offline Password Manager</h3>
@@ -23,7 +23,7 @@ VERSION        : v1.0.1
 <br>
 
 <div align="center">
-  <img src="assets/ui.png" alt="Blacksite Node Vault Interface" width="850"/>
+  <img src="src/assets/ui.png" alt="Blacksite Node Vault Interface" width="850"/>
 </div>
 
 ---
