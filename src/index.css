@@ -108,3 +108,8 @@
     @apply text-slate-label text-xs uppercase tracking-widest font-mono;
   }
 }
+
+@keyframes fade-scale-in {
+  0% { transform: scale(1.1); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}

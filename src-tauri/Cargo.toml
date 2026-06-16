@@ -65,6 +65,8 @@ base64 = "0.22"
 
 # Hex for ID generation
 hex = "0.4"
+image = "0.25.10"
+tauri-plugin-fs = "2.5.1"
 
 # Windows Clipboard API for secure password copying (bypassing Win+V history)
 [target.'cfg(windows)'.dependencies]

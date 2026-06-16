@@ -4,6 +4,7 @@ mod crypto;
 mod security;
 mod state;
 mod wordlists;
+mod stego;
 
 use state::{AppState, Session, VaultState, VaultStatus};
 use crate::crypto::{
@@ -478,6 +479,51 @@ async fn export_vault(export_path: String, state: State<'_, VaultState>) -> Resu
 }
 
 // ---------------------------------------------------------------------------
+// export_stego_vault
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn export_stego_vault(
+    carrier_path: String,
+    dest_path: String,
+    mode: String, // "eof" or "lsb"
+    state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let app_state = state.lock().await;
+    let session = app_state.session.as_ref().ok_or("Vault is locked.")?;
+    
+    if session.is_duress {
+        return Err("Cannot export from a duress session.".to_string());
+    }
+
+    let temp_dir = std::env::temp_dir();
+    let temp_path = temp_dir.join(format!("blacksite_stego_{}.tmp", rand::random::<u32>()));
+    
+    let salt = generate_salt();
+    encrypt_vault(
+        &session.vault_data,
+        &session.master_key,
+        &temp_path,
+        &salt,
+        None,
+    )?;
+
+    let payload = std::fs::read(&temp_path).map_err(|e| format!("Failed to read temp vault: {}", e))?;
+    let _ = std::fs::remove_file(&temp_path);
+
+    let carrier = std::path::PathBuf::from(carrier_path);
+    let dest = std::path::PathBuf::from(dest_path);
+
+    if mode == "lsb" {
+        crate::stego::embed_lsb(&carrier, &dest, &payload).map_err(|e| format!("LSB Steganography failed: {}", e))?;
+    } else {
+        crate::stego::embed_eof(&carrier, &dest, &payload).map_err(|e| format!("EOF Steganography failed: {}", e))?;
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // import_vault
 // ---------------------------------------------------------------------------
 
@@ -555,12 +601,74 @@ async fn secure_copy(text: String) -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
+// import_stego_vault
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn import_stego_vault(
+    source_path: String,
+    old_passphrase: String,
+    mode: String, // "eof" or "lsb"
+    state: State<'_, VaultState>,
+) -> Result<(), String> {
+    let source = std::path::PathBuf::from(&source_path);
+
+    let payload = if mode == "lsb" {
+        crate::stego::extract_lsb(&source).map_err(|e| format!("LSB Extraction failed: {}", e))?
+    } else {
+        crate::stego::extract_eof(&source).map_err(|e| format!("EOF Extraction failed: {}", e))?
+    };
+
+    let temp_dir = std::env::temp_dir();
+    let temp_path = temp_dir.join(format!("blacksite_stego_import_{}.tmp", rand::random::<u32>()));
+    std::fs::write(&temp_path, &payload).map_err(|e| format!("Failed to write temp vault: {}", e))?;
+
+    let salt = read_vault_salt(&temp_path).map_err(|e| { let _ = std::fs::remove_file(&temp_path); e.to_string() })?;
+    let old_key = derive_key(&old_passphrase, &salt).map_err(|e| { let _ = std::fs::remove_file(&temp_path); e.to_string() })?;
+    let imported_vault = decrypt_vault(&old_key, &temp_path).map_err(|e| { let _ = std::fs::remove_file(&temp_path); e.to_string() })?;
+    let _ = std::fs::remove_file(&temp_path);
+
+    let mut app_state = state.lock().await;
+    let vault_path = app_state.vault_path.clone();
+    let duress_blob = app_state.duress_blob.clone();
+    
+    let session = app_state.session.as_mut().ok_or("Vault is locked.")?;
+    
+    if session.is_duress {
+        return Err("Cannot import into a duress session.".to_string());
+    }
+
+    for mut imported_entry in imported_vault.entries.clone() {
+        let mut id_bytes = [0u8; 16];
+        OsRng.fill_bytes(&mut id_bytes);
+        imported_entry.id = hex::encode(id_bytes);
+        session.vault_data.entries.push(imported_entry);
+    }
+
+    let salt_bytes = read_vault_salt(&vault_path)?;
+    let mut salt_arr = [0u8; 16];
+    let copy_len = salt_bytes.len().min(16);
+    salt_arr[..copy_len].copy_from_slice(&salt_bytes[..copy_len]);
+
+    encrypt_vault(
+        &session.vault_data,
+        &session.master_key,
+        &vault_path,
+        &salt_arr,
+        duress_blob.as_ref(),
+    )?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tauri application entry point
 // ---------------------------------------------------------------------------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -593,6 +701,8 @@ pub fn run() {
             get_app_version,
             export_vault,
             import_vault,
+            export_stego_vault,
+            import_stego_vault,
             secure_copy,
         ])
         .run(tauri::generate_context!())

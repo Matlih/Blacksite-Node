@@ -8,6 +8,13 @@
     "opener:default",
     "dialog:default",
     "dialog:allow-save",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "fs:default",
+    "fs:allow-temp-write",
+    "fs:allow-temp-read",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$TEMP/**" }]
+    }
   ]
 }

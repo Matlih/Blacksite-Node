@@ -11,6 +11,7 @@ import {
 import { GeneratorModal } from "./GeneratorModal";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { IrisShutterLoader } from "./IrisShutterLoader";
+import { StegoExportModal } from "./StegoExportModal";
 
 interface VaultViewProps {
   onLock: () => void;
@@ -71,6 +72,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
   const [formError, setFormError] = useState("");
   
   const [showGenerator, setShowGenerator] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   
 
@@ -145,20 +147,8 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
     };
   }, [inactivityMinutes, handleLock]);
 
-  const handleExport = async () => {
-    try {
-      const filePath = await saveDialog({
-        filters: [{ name: 'Blacksite Export', extensions: ['bsx'] }],
-        defaultPath: 'vault_export.bsx'
-      });
-      if (!filePath) return;
-
-      await exportVault(filePath);
-      setError(""); 
-      alert(`Vault exported successfully to:\n${filePath}\n\nWARNING: This file is encrypted with your master passphrase. Protect it accordingly.`);
-    } catch (e) {
-      setError(String(e));
-    }
+  const handleExport = () => {
+    setExportModalOpen(true);
   };
 
   const toggleReveal = (id: string) => {
@@ -560,6 +550,12 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
           }}
         />
       )}
+
+      {/* Stego Export modal */}
+      <StegoExportModal 
+        isOpen={exportModalOpen} 
+        onClose={() => setExportModalOpen(false)} 
+      />
     </div>
   );
 };

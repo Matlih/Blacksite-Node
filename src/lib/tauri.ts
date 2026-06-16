@@ -119,6 +119,16 @@ export async function importVault(importPath: string, oldPassphrase: string): Pr
   await invoke("import_vault", { importPath, oldPassphrase });
 }
 
+/** Exports the vault using Steganography (EOF or LSB) into a carrier image. */
+export async function exportStegoVault(carrierPath: string, destPath: string, mode: string): Promise<void> {
+  await invoke("export_stego_vault", { carrierPath, destPath, mode });
+}
+
+/** Imports a Steganographic vault from a carrier image. */
+export async function importStegoVault(sourcePath: string, oldPassphrase: string, mode: string): Promise<void> {
+  await invoke("import_stego_vault", { sourcePath, oldPassphrase, mode });
+}
+
 /** Securely copies text to the OS clipboard, bypassing clipboard history on Windows. */
 export async function secureCopy(text: string): Promise<void> {
   await invoke("secure_copy", { text });

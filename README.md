@@ -1,5 +1,9 @@
-# BLACKSITE NODE
-### Sovereign Offline Password Manager
+<div align="center">
+  <img src="assets/app_icon.png" alt="Blacksite Node Logo" width="150"/>
+  
+  <h1>BLACKSITE NODE</h1>
+  <h3>Sovereign Offline Password Manager</h3>
+</div>
 
 ```
 CLASSIFICATION : PERSONAL SECURITY INFRASTRUCTURE
@@ -9,9 +13,22 @@ STORAGE        : Single encrypted .blacksite file — zero cloud, zero sync, zer
 VERSION        : v1.0.1
 ```
 
+<div align="left">
+  <h3>Support the Developer</h3>
+  <a href="https://ko-fi.com/matlih">
+    <img src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi" />
+  </a>
+</div>
+
+<br>
+
+<div align="center">
+  <img src="assets/ui.png" alt="Blacksite Node Vault Interface" width="850"/>
+</div>
+
 ---
 
-## I. FEATURES OVERVIEW
+## FEATURES OVERVIEW
 
 - **Zero-Knowledge Architecture:** No cloud, no sync, no accounts. 
 - **Duress Protocol:** Canary passphrase triggers silent wipe and ghost session.

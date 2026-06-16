@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { RefreshCw, ShieldCheck, AlertTriangle, Copy, Check, Skull, Upload } from "lucide-react";
-import { generatePassphrase, setupVault, importVault, getAppVersion } from "../lib/tauri";
+import { generatePassphrase, setupVault, importVault, importStegoVault, getAppVersion } from "../lib/tauri";
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { MinimalLineLoader } from "./MinimalLineLoader";
 
@@ -15,6 +15,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ onSetupComplete }) => {
   const [canaryPassphrase, setCanaryPassphrase] = useState<string>("");
   const [confirmInput, setConfirmInput] = useState<string>("");
   const [phase, setPhase] = useState<Phase>("generate");
+  const [importMode, setImportMode] = useState<"standard"|"stego_eof"|"stego_lsb">("standard");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [copiedMaster, setCopiedMaster] = useState(false);
@@ -85,19 +86,26 @@ export const SetupView: React.FC<SetupViewProps> = ({ onSetupComplete }) => {
 
   const handleImport = async () => {
     try {
+      const filters = importMode === "standard" 
+        ? [{ name: 'Blacksite Export', extensions: ['bsx'] }]
+        : importMode === "stego_lsb" 
+          ? [{ name: 'Lossless Images (High-Res/RAW)', extensions: ['png', 'bmp', 'tif', 'tiff', 'webp', 'avif', 'raw', 'nef', 'cr2'] }]
+          : [{ name: 'Universal Media (4K Video/Lossless Audio)', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'tif', 'tiff', 'svg', 'eps', 'raw', 'nef', 'cr2', 'mp4', 'mov', 'mkv', 'avi', 'wav', 'aiff', 'flac', 'mp3', 'm4a', 'aac', 'ogg', 'pdf'] }];
+
       const selected = await openDialog({
         multiple: false,
-        filters: [{
-          name: 'Blacksite Export',
-          extensions: ['bsx']
-        }]
+        filters
       });
       if (selected === null) return;
       
       setPhase("import");
       setError("");
       setLoading(true);
-      await importVault(selected as string, importOldPassphrase);
+      if (importMode === "standard") {
+        await importVault(selected as string, importOldPassphrase);
+      } else {
+        await importStegoVault(selected as string, importOldPassphrase, importMode === "stego_lsb" ? "lsb" : "eof");
+      }
       
       // Setup the vault immediately with the newly generated master key
       await setupVault(masterPassphrase, canaryPassphrase);
@@ -152,9 +160,33 @@ export const SetupView: React.FC<SetupViewProps> = ({ onSetupComplete }) => {
             <h2 className="text-lg tracking-widest uppercase">Import Vault</h2>
           </div>
           <p className="text-slate-dim mb-4 text-sm leading-relaxed">
-            Please select your `.bsx` export file, and provide the OLD master passphrase used when the file was exported.
-            After import, it will be secured under your NEW master passphrase.
+            Select your export file and provide the OLD master passphrase used when it was exported.
           </p>
+
+          <div className="mb-4 space-y-2">
+            <label className="text-xs font-bold text-slate-400">IMPORT METHODOLOGY</label>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+                <input type="radio" checked={importMode === "standard"} onChange={() => setImportMode("standard")} className="accent-blue-active" />
+                Standard (.bsx)
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+                <input type="radio" checked={importMode === "stego_eof"} onChange={() => setImportMode("stego_eof")} className="accent-blue-active" />
+                Universal Steganography (EOF)
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+                <input type="radio" checked={importMode === "stego_lsb"} onChange={() => setImportMode("stego_lsb")} className="accent-blue-active" />
+                True Stealth Steganography (LSB)
+              </label>
+            </div>
+            <div className="text-xs text-zinc-500 mt-2 mb-2">
+              {importMode === "stego_lsb" 
+                ? "Requires the original high-res, lossless picture (PNG, TIFF, RAW)." 
+                : importMode === "stego_eof"
+                  ? "Works best with 4K video, lossless audio (FLAC/WAV), or high-res pictures."
+                  : ""}
+            </div>
+          </div>
           <input
             type="password"
             placeholder="Old Master Passphrase"

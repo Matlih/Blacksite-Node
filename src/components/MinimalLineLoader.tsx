@@ -10,29 +10,29 @@ export const MinimalLineLoader: React.FC<MinimalLineLoaderProps> = ({ text = "AU
 
   useEffect(() => {
     const charset = "0123456789ABCDEF";
-    let currProgress = 0;
+    let time = 0;
     
-    // Simulate a decryption/authorization sweep
+    // Indeterminate scrambler with a one-time expanding line
     const interval = setInterval(() => {
-      currProgress += 1.5; 
-      if (currProgress > 100) currProgress = 100;
-      setProgress(currProgress);
+      time += 0.05; 
+      
+      // Expand outwards starting from 25%, cap at 100
+      let sweepPos = 25 + (time * 20); 
+      if (sweepPos > 100) sweepPos = 100;
+      setProgress(sweepPos);
 
       let newStr = "";
       for (let i = 0; i < 64; i++) {
         // The characters vanish as the solid line expands from the center
-        // To make it expand from center, we clear out the middle characters first.
         const centerDistance = Math.abs(i - 32);
         
-        if (centerDistance < ((currProgress / 100) * 32)) {
-          newStr += "\u00A0"; // Non-breaking space
+        if (centerDistance < ((sweepPos / 100) * 32)) {
+          newStr += "\u00A0"; 
         } else {
           newStr += charset[Math.floor(Math.random() * charset.length)];
         }
       }
       setChars(newStr);
-
-      if (currProgress >= 100) clearInterval(interval);
     }, 30);
 
     return () => clearInterval(interval);
@@ -51,14 +51,14 @@ export const MinimalLineLoader: React.FC<MinimalLineLoaderProps> = ({ text = "AU
         
         {/* The Solid Glowing Line that Expands from Center */}
         <div 
-          className="absolute h-[2px] bg-blue-active shadow-[0_0_12px_rgba(56,189,248,1)] transition-all duration-75 ease-linear"
+          className="absolute h-[2px] bg-blue-active shadow-[0_0_12px_rgba(56,189,248,1)]"
           style={{ width: `${progress}%` }}
         />
 
       </div>
 
       {/* Subtle Text */}
-      <div className="mt-10 text-slate-label font-mono text-xs tracking-[0.5em] uppercase opacity-80">
+      <div className="mt-10 text-slate-label font-mono text-xs tracking-[0.5em] uppercase opacity-80 animate-pulse">
         {text}
       </div>
       
