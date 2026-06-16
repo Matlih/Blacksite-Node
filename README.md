@@ -20,15 +20,15 @@ VERSION        : v1.0.1
   </a>
 </div>
 
-<div align="center">
-  <h2>100% Free, Open Source Software</h2>
-  <p><b>Blacksite Node is forever free. No subscriptions. No telemetry. Zero clouds.</b></p>
-</div>
-
 <br>
 
 <div align="center">
   <img src="public/ui.png" alt="Blacksite Node Vault Interface" width="850"/>
+</div>
+
+<div align="center">
+  <h2>100% Free, Open Source Software</h2>
+  <p><b>Blacksite Node is forever free. No subscriptions. No telemetry. Zero clouds.</b></p>
 </div>
 
 ---
