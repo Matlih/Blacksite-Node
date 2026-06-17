@@ -154,6 +154,26 @@ A `.bsx` file is identical in structure to the main `vault.blacksite` file. It i
 
 When importing a `.bsx` file on a new device, the user must provide the exact master passphrase used at the time the export was created. The Rust backend temporarily derives the old Argon2id key in memory, decrypts the `.bsx` payload, merges the entries into the active session, and immediately zeroizes the temporary key. The imported data is never written to disk until the active session is securely flushed using the current session's encryption key.
 
+### Vault Backup & Steganography Best Practices
+
+To ensure your encrypted backups and stealth payloads remain viable in the event of hardware failure:
+
+- **Strict Cold Storage:** Store `.bsx` and Steganography files exclusively on physical, disconnected hardware (e.g., dedicated offline USB drives).
+- **The Compression Threat:** **NEVER** upload Steganography files (LSB or EOF images/videos) to cloud photo services (Google Photos, iCloud) or messaging apps (Discord, WhatsApp). These platforms apply automatic lossy compression algorithms that will permanently destroy the hidden encrypted payload, rendering the vault unrecoverable.
+- **Safe Transmission:** If you absolutely must transmit an LSB or EOF file across an untrusted network, compress it into a `.zip` or `.rar` archive first. This prevents transit gateways from tampering with the file's binary data or stripping its payload.
+
+### Factory Reset / Data Wipe (Lost Passphrase)
+
+Because Blacksite Node is a strict zero-knowledge architecture, **there is absolutely no password recovery.** If you lose your Master Passphrase, your vault is mathematically irretrievable. 
+
+If you find yourself locked out and wish to completely factory reset the application to initialize a brand new sovereign vault, you must manually delete the local application data directory.
+
+Open **PowerShell** and execute the following command:
+```powershell
+Remove-Item -Recurse -Force "$env:APPDATA\com.blacksite.node"
+```
+After executing, restart the application. You will be greeted by the initial Welcome screen to generate a new vault.
+
 ---
 
 ## III. THE CRYPTOGRAPHIC MATH
@@ -228,7 +248,85 @@ This assumes the attacker knows the algorithm, has the vault file, has a GPU clu
 
 ---
 
-## IV. BUILD INSTRUCTIONS
+## IV. MACHINE LEARNING ENGINE
+
+Blacksite Node features a fully offline, air-gapped machine learning engine to evaluate password strength. Rather than relying on simple regex checks (e.g., "must contain 1 uppercase, 1 number"), the ML Engine computes the actual statistical guessability of the password.
+
+### 1. Architecture & NLP Stack
+- **Model Architecture**: Character-Level LSTM (Long Short-Term Memory) Recurrent Neural Network.
+- **Inference Runtime**: ONNX Runtime (CPU-only, standalone `~13MB` wheel) — extremely fast and requires no external ML dependencies or graphics drivers.
+- **Scoring Math (NLL)**: The model predicts the probability of the *next* character given the previous characters. The strength is determined by calculating the **Negative Log-Likelihood (NLL)**. A higher NLL means the password is highly unpredictable to the model (High Entropy / Strong).
+- **Hybrid Pre-Check**: Passwords shorter than the context window (`seq_len=10`) are evaluated by a fast, rule-based diversity heuristic proxy, capping naturally at Moderate.
+
+### 2. Training Details
+- **Date Trained**: June 2026.
+- **Epochs**: Dynamically trained for 20 epochs with Early Stopping.
+- **Evaluation**: Best Validation Loss: `1.8096` | Best Validation Accuracy: `52.79%`. 
+  > *Note: 53% character-level accuracy means the model correctly predicts the exact next character out of 97 possible tokens more than half the time—a very strong indicator of human password predictability. The 97-character vocabulary consists of 26 lowercase, 26 uppercase, 10 digits, 32 symbols, and 3 special ML tokens (`<PAD>`, `<BOS>`, `<EOS>`).*
+- **Datasets**: The model was trained on a total of **3 million passwords** (merged and randomly deduplicated) drawn from a mix of 3 datasets to learn raw, unfiltered human password-generation patterns. Training was accelerated using a Google Colab T4 GPU.
+
+| Dataset | Passwords | What it adds |
+| :--- | :--- | :--- |
+| **RockYou** | 14.3M | English patterns, leet speak baseline |
+| **SecLists 10M** | 10M | Post-2016 breaches, default credentials |
+| **Probable Wordlists Top95** | ~30M | Frequency-ranked real passwords, multi-language |
+- **Open Source Pipeline**: The complete end-to-end training pipeline, data preparation, quantization, and ONNX export code is provided in `ml_engine/blacksite_ml_pipeline.ipynb` and the `ml_engine/` directory.
+
+### 3. Inference and Scoring (The Mathematics)
+For password $p = c_1c_2 \ldots c_n$, the **joint log-probability** is:
+
+$$ \log P(p) = \sum_{t=k+1}^{n} \log P(c_t \mid c_{t-k}, \ldots, c_{t-1}) $$
+
+where $k =$ `seq_len` $= 10$ (context window size).
+
+The **NLL per character** (the strength metric):
+
+$$ \text{NLL} = \frac{-\log P(p)}{n - k} $$
+
+| NLL Range | Label | Interpretation |
+| :--- | :--- | :--- |
+| $\text{NLL} < 1.5$ | 🔴 **Weak** | Model predicts it easily — it IS common |
+| $1.5 \le \text{NLL} < 3.0$ | 🟡 **Moderate** | Some structure, but patterned |
+| $\text{NLL} \ge 3.0$ | 🟢 **Strong** | Model is consistently surprised |
+
+### 4. Architecture Flow
+<div align="center">
+  <img src="ml_engine/ml_architecture.png" alt="ML Engine Architecture Flow" width="850"/>
+</div>
+**Code**: `ml_architecture.md`
+
+### 5. Testing the ML Engine Locally
+The machine learning engine is completely decoupled from the Tauri application and can be tested directly from your terminal. This guarantees transparent, open-source verification of the neural network's behavior.
+
+```bash
+cd ml_engine
+
+# Install the minimal dependencies (ONNX Runtime)
+pip install -r requirements.txt
+
+# Run the inference script in interactive daemon mode
+python inference.py \
+  --model exports/password_model.onnx \
+  --vocab exports/vocab.json \
+  --meta exports/dataset_meta.json \
+  --daemon
+```
+
+*Once the script says `READY`, you can physically type out your own passwords into the terminal and hit Enter! The ML model will instantly calculate and return the exact statistical strength of your password.*
+
+**Example interaction in your terminal:**
+```json
+READY
+{"password": "my_super_secret_password!"}
+{"label": "Strong", "nll": 3.42, "color_hint": "bg-emerald-500", "char_count": 25}
+```
+
+---
+
+```
+BLACKSITE NODE — No cloud. No account. No mercy.
+```
+## V. BUILD INSTRUCTIONS
 
 ### Prerequisites
 
@@ -326,52 +424,6 @@ src-tauri\target\x86_64-pc-windows-gnu\release\blacksite-node.exe
 
 ---
 
-## V. PORTABLE DEPLOYMENT (GNU TOOLCHAIN)
-
-### The GNU Runtime Dependency
-
-Because Blacksite Node is compiled with the **GNU toolchain** (`x86_64-pc-windows-gnu`), the release binary does not statically link the WebView2 loader. The portable deployment is a **two-file pair** — both must reside in the same directory for the application to initialize its rendering engine.
-
-```
-blacksite-node.exe    ← main application binary
-WebView2Loader.dll    ← WebView2 runtime bridge (GNU toolchain dependency)
-```
-
-If `WebView2Loader.dll` is absent from the directory, the application will fail to launch with a missing DLL error before any window appears.
-
-Both files are produced by `npm run tauri build` and are located at:
-
-```
-src-tauri\target\x86_64-pc-windows-gnu\release\blacksite-node.exe
-src-tauri\target\x86_64-pc-windows-gnu\release\WebView2Loader.dll
-```
-
-### USB Deployment Layout
-
-For operators running Blacksite Node from an encrypted USB drive with zero Windows Registry footprint, copy both files together:
-
-```
-[USB Drive]
-├── blacksite-node.exe
-├── WebView2Loader.dll
-└── README.txt
-```
-
-> **Note:** The vault file (`vault.blacksite`) is written to the host machine's `%APPDATA%\com.blacksite.node\` directory, not to the USB drive. The USB carries only the stateless executable pair. If a fully self-contained deployment is required — vault traveling with the binary — see the wrapper script pattern in Section VI.
-
-### WebView2 Runtime Requirement
-
-The target machine must have the **Microsoft WebView2 Runtime** installed. On Windows 10 (version 1803+) and Windows 11, WebView2 ships as a system component and is updated automatically. On air-gapped or minimal installations, the NSIS installer (`Blacksite Node_0.1.0_x64-setup.exe`) bundles an offline WebView2 installer and handles this automatically.
-
-For the portable binary on machines without WebView2, install the runtime manually before running:
-
-```
-https://developer.microsoft.com/en-us/microsoft-edge/webview2/
-→ Download: Evergreen Bootstrapper or Standalone Installer (x64)
-```
-
----
-
 ## VI. SECURITY PROPERTIES SUMMARY
 
 | Property | Implementation |
@@ -414,9 +466,9 @@ Blacksite Node ships in two distribution forms to cover different operational co
 
 ---
 
-**1. Windows Installer (`blacksite-node-setup.exe`)**
+**1. Windows Installers (NSIS and MSI)**
 
-A standard NSIS installation wizard. Installs the application to `Program Files`, creates Start Menu shortcuts, and registers an uninstaller entry in the Windows Control Panel. Intended for everyday users on a fixed workstation.
+Standard installation wizards. Installs the application to `Program Files`, creates Start Menu shortcuts, and registers an uninstaller entry in the Windows Control Panel. Intended for everyday users on a fixed workstation.
 
 ```
 Target audience   :  Fixed workstation operators
@@ -425,10 +477,11 @@ Registry entries  :  Uninstaller key (HKLM\Software\Microsoft\Windows\CurrentVer
 Vault location    :  %APPDATA%\com.blacksite.node\vault.blacksite
 ```
 
-Built by Tauri's NSIS bundler as part of `npm run tauri build`. Output:
+Built by Tauri's bundler as part of `npm run tauri build`. Outputs:
 
 ```
-src-tauri\target\release\bundle\nsis\Blacksite Node_0.1.0_x64-setup.exe
+src-tauri\target\x86_64-pc-windows-gnu\release\bundle\nsis\Blacksite Node_1.0.1_x64-setup.exe
+src-tauri\target\x86_64-pc-windows-gnu\release\bundle\msi\Blacksite Node_1.0.1_x64_en-US.msi
 ```
 
 ---
@@ -439,16 +492,25 @@ A standalone executable with zero Windows Registry footprint. No installer. No e
 
 ```
 Target audience   :  Field operators, air-gapped environments, USB deployments
-Installation path :  None — single file, runs in place
+Installation path :  None — runs in place
 Registry entries  :  Zero
 Vault location    :  %APPDATA%\com.blacksite.node\vault.blacksite
 ```
+
+### The GNU Runtime Dependency
+Because Blacksite Node is compiled with the **GNU toolchain** (`x86_64-pc-windows-gnu`), the portable binary does not statically link the WebView2 loader. The portable deployment is a **two-file pair** — both must reside in the same directory.
+```
+blacksite-node.exe    ← main application binary
+WebView2Loader.dll    ← WebView2 runtime bridge (GNU toolchain dependency)
+```
+If `WebView2Loader.dll` is absent, the application will crash on launch.
 
 **Recommended operational pattern for USB deployment:**
 
 ```
 [Encrypted USB Drive]
 ├── blacksite-node.exe          ← the binary
+├── WebView2Loader.dll          ← GNU runtime dependency
 └── README.txt                  ← passphrase storage reminder
 ```
 
@@ -465,10 +527,23 @@ Start-Process "$PSScriptRoot\blacksite-node.exe"
 ```
 
 > The portable binary is extracted from the Tauri release build at:
-> `src-tauri\target\release\blacksite-node.exe`
+> `src-tauri\target\x86_64-pc-windows-gnu\release\blacksite-node.exe`
+> The companion DLL is located at:
+> `src-tauri\target\x86_64-pc-windows-gnu\release\WebView2Loader.dll`
+
+### WebView2 Runtime Requirement
+
+The target machine must have the **Microsoft WebView2 Runtime** installed. On Windows 10 (version 1803+) and Windows 11, WebView2 ships as a system component and is updated automatically. On air-gapped or minimal installations, the NSIS installer (`blacksite-node-setup.exe`) bundles an offline WebView2 installer and handles this automatically.
+
+For the portable binary on machines without WebView2, install the runtime manually before running:
+
+```
+https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+→ Download: Evergreen Bootstrapper or Standalone Installer (x64)
+```
 
 ---
 
-```
+`
 BLACKSITE NODE — No cloud. No account. No mercy.
-```
+`
