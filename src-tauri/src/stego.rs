@@ -1,4 +1,4 @@
-use image::{DynamicImage, ImageFormat};
+use image::ImageFormat;
 use std::fs;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -42,7 +42,7 @@ pub fn extract_eof(source_path: &PathBuf) -> Result<Vec<u8>, StegoError> {
 
 /// Embeds payload via LSB (Least Significant Bit) Pixel Modification (PNG only)
 pub fn embed_lsb(carrier_path: &PathBuf, dest_path: &PathBuf, payload: &[u8]) -> Result<(), StegoError> {
-    let mut img = image::open(carrier_path)?.into_rgba8();
+    let img = image::open(carrier_path)?.into_rgba8();
     let width = img.width();
     let height = img.height();
     let mut raw_pixels = img.into_raw();

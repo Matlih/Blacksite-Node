@@ -6,12 +6,14 @@ import {
 import type { CredentialEntry, PasswordHistoryEntry } from "../lib/tauri";
 import { 
   getCredentials, addCredential, editCredential, deleteCredential, 
-  deleteHistoryEntry, lockVault, getAppVersion, exportVault, secureCopy 
+  deleteHistoryEntry, lockVault, getAppVersion, secureCopy 
 } from "../lib/tauri";
 import { GeneratorModal } from "./GeneratorModal";
-import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { IrisShutterLoader } from "./IrisShutterLoader";
 import { StegoExportModal } from "./StegoExportModal";
+import { AboutModal } from "./AboutModal";
+import { NotesView } from "./NotesView";
+import { Dropdown } from "./Dropdown";
 
 interface VaultViewProps {
   onLock: () => void;
@@ -70,6 +72,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
   const [form, setForm] = useState<CredentialForm>(EMPTY_FORM);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [isModalPasswordRevealed, setIsModalPasswordRevealed] = useState(false);
   
   const [showGenerator, setShowGenerator] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -78,7 +81,10 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
 
   const [locking, setLocking] = useState(false);
   const [showLockAnimation, setShowLockAnimation] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [appVersion, setAppVersion] = useState<string>("0.1.0");
+
+  const [activeTab, setActiveTab] = useState<"passwords" | "notes">("passwords");
 
   const [sortField, setSortField] = useState<SortField>("service");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
@@ -284,6 +290,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
 
   return (
     <div className="flex flex-col h-full bg-gunmetal-900 text-slate-text font-mono overflow-hidden relative">
+      <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} appVersion={appVersion} allowWipe={true} onExportRequest={() => { handleExport(); }} />
       {showLockAnimation && <IrisShutterLoader />}
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 bg-gunmetal-800 border-b border-ops-700 shrink-0">
@@ -291,45 +298,67 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
           <img src="/app_logo.png" alt="Blacksite Node" className="h-6 w-auto object-contain" />
           <span className="text-xs uppercase tracking-widest text-slate-dim hidden md:inline">BLACKSITE NODE</span>
           <span className="text-xs text-ops-500 select-none">|</span>
-          <span className="text-xs text-blue-active">{entries.length} CREDENTIAL{entries.length !== 1 ? "S" : ""}</span>
+          <div className="flex bg-gunmetal-900 rounded-full p-0.5 border border-ops-700/50">
+            <button 
+              onClick={() => setActiveTab("passwords")}
+              className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-widest transition-colors ${activeTab === "passwords" ? "bg-cyan-600/20 text-cyan-400" : "text-zinc-500 hover:text-slate-300"}`}
+            >
+              PASSWORDS
+            </button>
+            <button 
+              onClick={() => setActiveTab("notes")}
+              className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-widest transition-colors ${activeTab === "notes" ? "bg-cyan-600/20 text-cyan-400" : "text-zinc-500 hover:text-slate-300"}`}
+            >
+              NOTES
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 mr-2 hidden sm:flex">
             <span className="text-xs text-slate-dim">AUTO-LOCK:</span>
-            <select
-              value={inactivityMinutes}
-              onChange={(e) => {
-                const val = parseInt(e.target.value, 10);
-                setInactivityMinutes(val);
-                localStorage.setItem("blacksite_autolock_mins", val.toString());
+            <Dropdown
+              value={String(inactivityMinutes || 15)}
+              onChange={(val) => {
+                const num = parseInt(val, 10);
+                setInactivityMinutes(num);
+                localStorage.setItem("blacksite_autolock_mins", num.toString());
               }}
-              className="bg-transparent text-xs text-ops-500 hover:text-blue-active outline-none cursor-pointer"
-            >
-              <option value={1} className="bg-gunmetal-900">1 MIN</option>
-              <option value={5} className="bg-gunmetal-900">5 MIN</option>
-              <option value={10} className="bg-gunmetal-900">10 MIN</option>
-              <option value={15} className="bg-gunmetal-900">15 MIN</option>
-              <option value={30} className="bg-gunmetal-900">30 MIN</option>
-            </select>
+              options={[
+                { label: "1 MIN", value: "1" },
+                { label: "5 MIN", value: "5" },
+                { label: "10 MIN", value: "10" },
+                { label: "15 MIN", value: "15" },
+                { label: "30 MIN", value: "30" },
+              ]}
+              className="text-ops-500 hover:text-blue-active font-mono"
+            />
           </div>
 
-          <button onClick={handleExport} className="btn-ghost flex items-center gap-1 py-1 px-2 text-xs">
-            <Download size={12} /> EXPORT
-          </button>
-          <button onClick={() => setShowGenerator(true)} className="btn-ghost flex items-center gap-1 py-1 px-2 text-xs">
-            <Zap size={12} /> GEN
-          </button>
-          <button onClick={() => { setShowForm(true); setFormMode("add"); setForm(EMPTY_FORM); setFormError(""); }} className="btn-primary flex items-center gap-1 py-1 px-2 text-xs">
-            <Plus size={12} /> ADD
-          </button>
+          {activeTab === "passwords" && (
+            <>
+              <button onClick={handleExport} className="btn-ghost flex items-center gap-1 py-1 px-2 text-xs">
+                <Download size={12} /> EXPORT
+              </button>
+              <button onClick={() => setShowGenerator(true)} className="btn-ghost flex items-center gap-1 py-1 px-2 text-xs">
+                <Zap size={12} /> GEN
+              </button>
+              <button onClick={() => { setShowForm(true); setFormMode("add"); setForm(EMPTY_FORM); setFormError(""); }} className="btn-primary flex items-center gap-1 py-1 px-2 text-xs">
+                <Plus size={12} /> ADD
+              </button>
+            </>
+          )}
+
           <button onClick={() => handleLock(true)} disabled={locking || showLockAnimation} className="btn-danger flex items-center gap-1 py-1 px-2 text-xs">
             <Lock size={12} /> {locking || showLockAnimation ? "LOCKING..." : "LOCK"}
           </button>
         </div>
       </div>
 
-      {/* Search bar */}
-      <div className="px-5 py-2 bg-gunmetal-800 border-b border-ops-700 shrink-0 flex gap-2">
+      {/* Main Content Area */}
+      {activeTab === "passwords" ? (
+        <>
+          {/* Search bar */}
+          <div className="px-5 py-2 bg-gunmetal-800 border-b border-ops-700 shrink-0 flex gap-2">
         <div className="flex-1 flex items-center gap-2 bg-gunmetal-900 border border-ops-600 px-3 py-1.5 focus-within:border-blue-ops">
           <Search size={12} className="text-slate-label shrink-0" />
           <input
@@ -338,14 +367,16 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
             className="flex-1 bg-transparent outline-none text-slate-text text-xs font-mono placeholder:text-slate-label"
           />
         </div>
-        <select 
-          value={categoryFilter} 
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="bg-gunmetal-900 border border-ops-600 px-3 py-1.5 text-xs text-slate-text outline-none focus:border-blue-ops cursor-pointer uppercase"
-        >
-          <option value="">ALL CATEGORIES</option>
-          {filterOptions.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
-        </select>
+        <Dropdown 
+          value={categoryFilter}
+          onChange={(val) => setCategoryFilter(val)}
+          placeholder="ALL CATEGORIES"
+          options={[
+            { label: "ALL CATEGORIES", value: "" },
+            ...filterOptions.filter(Boolean).map(cat => ({ label: String(cat).toUpperCase(), value: String(cat) }))
+          ]}
+          className="bg-gunmetal-900 border border-ops-600 px-3 py-1.5 text-xs text-slate-text outline-none focus-within:border-blue-ops min-w-[140px] uppercase font-mono justify-between"
+        />
       </div>
 
       {/* Error banner */}
@@ -398,7 +429,12 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
                   <div className="label-ops text-xs">PASSWORD *</div>
                   <button type="button" onClick={() => setShowGenerator(true)} className="text-xs text-blue-ops hover:text-blue-active uppercase tracking-wider">generate →</button>
                 </div>
-                <input type="password" value={form.password} onChange={(e) => setForm(f => ({...f, password: e.target.value}))} placeholder="••••••••••••" className="input-ops mb-1" required />
+                <div className="relative mb-1">
+                  <input type={isModalPasswordRevealed ? "text" : "password"} value={form.password} onChange={(e) => setForm(f => ({...f, password: e.target.value}))} placeholder="••••••••••••" className="input-ops w-full pr-8" required />
+                  <button type="button" onClick={() => setIsModalPasswordRevealed(!isModalPasswordRevealed)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-label hover:text-slate-text p-1 transition-colors" tabIndex={-1} title={isModalPasswordRevealed ? "Hide password" : "Reveal password"}>
+                    {isModalPasswordRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
                 {form.password && (
                   <div className="flex items-center gap-2">
                     <div className="h-1 flex-1 bg-ops-800 rounded overflow-hidden">
@@ -510,6 +546,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
                                     <span className="text-xs text-slate-label">Retired: {new Date(hist.retired_at * 1000).toLocaleString()}</span>
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    <button onClick={() => toggleReveal(entry.id)} className="p-1 text-slate-label hover:text-slate-text" title="Toggle visibility">
+                                      {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                                    </button>
                                     <button onClick={() => handleCopyPassword(hist as any, `${entry.id}-hist-${idx}`)} className={`p-1 text-slate-label hover:text-slate-text ${histCopied ? "text-blue-active" : ""}`}>
                                       {histCopied ? <Check size={12} /> : <Copy size={12} />}
                                     </button>
@@ -536,8 +575,14 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
       <div className="px-5 py-1.5 bg-gunmetal-800 border-t border-ops-700 flex items-center justify-between shrink-0">
         <span className="text-xs text-slate-label">{filteredAndSortedEntries.length} of {entries.length} entries</span>
         <span className="text-xs text-slate-label hidden md:inline">VAULT · ENCRYPTED AT REST · ZERO-KNOWLEDGE</span>
-        <span className="text-xs text-ops-500 font-mono tracking-widest">v{appVersion}</span>
+        <span className="text-xs text-ops-500 font-mono tracking-widest cursor-pointer hover:text-blue-active" onClick={() => setAboutOpen(true)}>v{appVersion}</span>
       </div>
+      </>
+      ) : (
+        <div className="flex-1 overflow-hidden">
+          <NotesView />
+        </div>
+      )}
 
       {/* Generator modal */}
       {showGenerator && (

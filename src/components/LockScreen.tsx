@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle, Eye, EyeOff } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, Vault, Trash2, Power } from "lucide-react";
 import { unlockVault, getVaultStatus, getAppVersion } from "../lib/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import { MinimalLineLoader } from "./MinimalLineLoader";
+import { AboutModal } from "./AboutModal";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -20,7 +23,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const [failedAttempts, setFailedAttempts] = useState(initialFailedAttempts);
   const [lockoutSecs, setLockoutSecs] = useState(initialLockoutSecs);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [appVersion, setAppVersion] = useState<string>("0.1.0");
+  
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [showWipeAuth, setShowWipeAuth] = useState(false);
+  const [showWipeSuccess, setShowWipeSuccess] = useState(false);
+  const [showWipeError, setShowWipeError] = useState(false);
+  const [wipePassphrase, setWipePassphrase] = useState("");
+  
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -79,12 +90,158 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     }
   }, [loading, lockoutSecs, passphrase, onUnlock]);
 
+  const handleWipeAuth = async () => {
+    if (!wipePassphrase.trim()) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      // Authenticate
+      await unlockVault(wipePassphrase.trim());
+      // If success, immediately wipe
+      await invoke("cmd_wipe_vault");
+      setShowWipeAuth(false);
+      setWipePassphrase("");
+      setShowWipeSuccess(true);
+    } catch (raw: any) {
+      const msg = String(raw);
+      if (msg.startsWith("LOCKED:")) {
+        const secs = parseInt(msg.split(":")[1], 10);
+        setLockoutSecs(secs);
+        const status = await getVaultStatus().catch(() => null);
+        if (status) setFailedAttempts(status.failed_attempts);
+        setError(`Lockout active. Wait ${secs}s before next attempt.`);
+        setShowWipeAuth(false);
+      } else {
+        const status = await getVaultStatus().catch(() => null);
+        if (status) {
+          setFailedAttempts(status.failed_attempts);
+          setLockoutSecs(status.lockout_remaining_secs);
+        }
+        setShowWipeAuth(false);
+        setShowWipeError(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isLocked = lockoutSecs > 0;
 
   return (
     <div className="flex flex-col h-full bg-gunmetal-900 text-slate-text font-mono relative">
+      <AboutModal isOpen={aboutOpen} onClose={() => setAboutOpen(false)} appVersion={appVersion} />
       {loading && <MinimalLineLoader text="AUTHORIZING" />}
       
+      <ConfirmDialog 
+        isOpen={showWipeConfirm}
+        title="WIPE ENTIRE VAULT?"
+        message="Are you absolutely sure you want to destroy this vault? This action is mathematically irreversible. All data will be zeroized."
+        onConfirm={() => {
+          setShowWipeConfirm(false);
+          setShowWipeAuth(true);
+        }}
+        onClose={() => setShowWipeConfirm(false)}
+      />
+
+      {/* Wipe Authentication Dialog */}
+      {showWipeAuth && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[999] flex items-center justify-center p-4">
+          <div className="bg-gunmetal-900 border border-red-critical rounded-lg p-6 w-full max-w-sm shadow-[0_0_30px_rgba(244,63,94,0.3)] animate-in fade-in zoom-in-95">
+            <h3 className="text-red-critical font-bold mb-2 flex items-center gap-2 tracking-widest">
+              <AlertTriangle size={18} /> VERIFY TO WIPE
+            </h3>
+            <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+              Enter your Master Passphrase to authorize the complete destruction of this vault.
+            </p>
+            <input 
+              type="password" 
+              autoFocus
+              placeholder="Master Passphrase"
+              className="input-ops border-red-critical/50 focus:border-red-critical w-full mb-6" 
+              value={wipePassphrase} 
+              onChange={(e) => setWipePassphrase(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleWipeAuth();
+                if (e.key === 'Escape') setShowWipeAuth(false);
+              }}
+              disabled={loading || isLocked}
+            />
+            <div className="flex justify-end gap-3">
+              <button className="text-slate-400 hover:text-slate-200 text-sm font-bold tracking-widest uppercase px-4" onClick={() => setShowWipeAuth(false)} disabled={loading}>
+                Cancel
+              </button>
+              <button className="bg-red-critical hover:bg-red-critical/80 text-white font-bold py-2 px-6 rounded transition-colors uppercase tracking-widest text-xs flex items-center gap-2" onClick={handleWipeAuth} disabled={loading || isLocked || !wipePassphrase.trim()}>
+                <Trash2 size={14} /> AUTHORIZE WIPE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wipe Error Dialog */}
+      {showWipeError && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
+          <div className="bg-gunmetal-900 border border-amber-warn/50 rounded-lg p-6 w-full max-w-sm shadow-[0_0_30px_rgba(245,158,11,0.2)] animate-in fade-in zoom-in-95 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-amber-warn/10 flex items-center justify-center mb-4">
+              <AlertTriangle size={32} className="text-amber-warn" />
+            </div>
+            <h3 className="text-amber-warn font-bold mb-2 tracking-widest text-lg">
+              INCORRECT PASSPHRASE
+            </h3>
+            <p className="text-slate-300 text-sm mb-8 leading-relaxed">
+              The passphrase you entered is incorrect. Do you want to try again or return to the lock screen?
+            </p>
+            <div className="flex flex-col gap-3 w-full">
+              <button 
+                className="btn-primary w-full py-3" 
+                onClick={() => {
+                  setShowWipeError(false);
+                  setShowWipeAuth(true);
+                  setWipePassphrase("");
+                }}
+              >
+                TRY AGAIN
+              </button>
+              <button 
+                className="text-slate-400 hover:text-slate-200 text-xs font-bold tracking-widest uppercase py-3 border border-ops-600 rounded transition-colors hover:bg-ops-700 w-full" 
+                onClick={() => {
+                  setShowWipeError(false);
+                  setWipePassphrase("");
+                }}
+              >
+                CANCEL WIPE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post-Wipe Action Dialog */}
+      {showWipeSuccess && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
+          <div className="bg-gunmetal-900 border border-emerald-500 rounded-lg p-6 w-full max-w-sm shadow-[0_0_30px_rgba(16,185,129,0.2)] animate-in fade-in zoom-in-95 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
+              <Trash2 size={32} className="text-emerald-500" />
+            </div>
+            <h3 className="text-emerald-400 font-bold mb-2 tracking-widest text-lg">
+              VAULT DESTROYED
+            </h3>
+            <p className="text-slate-300 text-sm mb-8 leading-relaxed">
+              The vault file and all associated data have been securely zeroized and deleted from the drive.
+            </p>
+            <div className="flex flex-col gap-3 w-full">
+              <button className="btn-primary w-full py-3" onClick={() => invoke("cmd_restart_app")}>
+                RESTART BLACKSITE
+              </button>
+              <button className="text-slate-400 hover:text-slate-200 text-xs font-bold tracking-widest uppercase py-3 border border-ops-600 rounded flex justify-center items-center gap-2 transition-colors hover:bg-ops-700" onClick={() => invoke("cmd_close_app")}>
+                <Power size={14} /> EXIT APPLICATION
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-gunmetal-800 border-b border-ops-700">
         <div className="flex items-center gap-3">
@@ -111,7 +268,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         <div className="w-full mb-2">
           <div className="label-ops mb-2">MASTER PASSPHRASE</div>
           <div className="flex items-center gap-2 bg-gunmetal-800 border border-ops-600 focus-within:border-blue-ops px-3 py-2">
-            <span className="text-blue-active text-sm select-none">▶</span>
+            <Vault size={16} className="text-blue-active shrink-0" />
             <input
               ref={inputRef}
               type={isRevealed ? "text" : "password"}
@@ -215,7 +372,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
         <div className="mt-6 text-xs text-slate-label text-center leading-relaxed">
           Argon2id · ChaCha20-Poly1305 · CSPRNG · Zero-knowledge<br/>
-          v{appVersion}
+          <span 
+            onClick={() => setAboutOpen(true)}
+            className="cursor-pointer hover:text-emerald-500 transition-colors inline-block pt-1"
+          >
+            v{appVersion}
+          </span>
+          <div className="mt-4 flex justify-center">
+            <button 
+              onClick={() => setShowWipeConfirm(true)}
+              className="text-[10px] text-slate-500 hover:text-red-critical transition-colors tracking-widest uppercase flex items-center gap-1 opacity-50 hover:opacity-100"
+            >
+              <Trash2 size={10} /> Factory Reset / Wipe Vault
+            </button>
+          </div>
         </div>
       </div>
     </div>

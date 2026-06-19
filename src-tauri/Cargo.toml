@@ -1,6 +1,6 @@
 [package]
 name = "blacksite-node"
-version = "1.0.1"
+version = "2.0.0"
 description = "Blacksite Node — Sovereign Offline Password Manager"
 authors = ["Blacksite Operator"]
 edition = "2021"
@@ -22,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
 
 # --- Serialization ---
 serde = { version = "1", features = ["derive"] }

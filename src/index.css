@@ -34,6 +34,12 @@
     user-select: text;
   }
 
+  /* Hide native browser password reveal eye icon (Edge/Chrome) */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
+
   /* Scrollbar — dark ops aesthetic */
   ::-webkit-scrollbar {
     width: 6px;
@@ -112,4 +118,32 @@
 @keyframes fade-scale-in {
   0% { transform: scale(1.1); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+@keyframes spin-dna {
+  0% { transform: rotateX(0deg); }
+  100% { transform: rotateX(360deg); }
+}
+
+@layer utilities {
+  .animate-pulse-slow {
+    animation: pulse-slow 3s ease-in-out infinite;
+  }
+
+  .animate-spin-dna {
+    animation: spin-dna 3s linear infinite;
+    transform-style: preserve-3d;
+  }
+
+  .bg-matrix {
+    background-image: linear-gradient(rgba(16, 185, 129, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.03) 1px, transparent 1px);
+    background-size: 30px 30px;
+    background-position: center center;
+  }
 }

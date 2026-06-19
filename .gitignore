@@ -60,3 +60,24 @@ $RECYCLE.BIN/
 
 # --- Mobile / Android ---
 src-tauri/gen/android/app/build/
+
+# --- ML Engine: training artifacts (large, never commit) ---
+ml_engine/data/
+ml_engine/models/
+
+# --- ML Engine: raw password datasets (sensitive + large) ---
+*.txt
+!README*.txt
+ml_engine/**/*.txt
+
+# --- ML Engine: TFLite files (not shipped; use ONNX) ---
+ml_engine/exports/*.tflite
+
+# --- ML Engine: Python cache ---
+ml_engine/__pycache__/
+ml_engine/**/__pycache__/
+
+# --- ML Engine: keep these (ship with the app) ---
+!ml_engine/exports/password_model.onnx
+!ml_engine/exports/vocab.json
+!ml_engine/exports/dataset_meta.json

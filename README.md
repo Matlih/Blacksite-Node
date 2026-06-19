@@ -2,7 +2,7 @@
   <img src="public/app_logo.png" alt="Blacksite Node Logo" width="150"/>
   
   <h1>BLACKSITE NODE</h1>
-  <h3>Sovereign Offline Password Manager</h3>
+  <h3>Sovereign Offline Password Manager & Secure Notepad</h3>
 </div>
 
 ```
@@ -10,7 +10,7 @@ CLASSIFICATION : PERSONAL SECURITY INFRASTRUCTURE
 ARCHITECTURE   : Tauri v2 · Rust · React · TypeScript · Vite · TailwindCSS
 CIPHER SUITE   : Argon2id · ChaCha20-Poly1305 · OsRng CSPRNG
 STORAGE        : Single encrypted .blacksite file — zero cloud, zero sync, zero trust
-VERSION        : v1.0.1
+VERSION        : v2.0.0
 ```
 
 <div align="center">
@@ -36,33 +36,38 @@ VERSION        : v1.0.1
 ## FEATURES OVERVIEW
 
 - **Zero-Knowledge Architecture:** No cloud, no sync, no accounts. 
+- **Volatile Memory Execution:** The plaintext vault and cryptographic keys exist strictly in RAM and are permanently zeroized upon lock. Data is never written to disk unencrypted.
 - **Duress Protocol:** Canary passphrase triggers silent wipe and ghost session.
 - **Inactivity Auto-Lock:** Configurable (1, 5, 10, 15, 30 minutes).
 - **Secure Native Clipboard:** Fast native OS API clipboard with reliable 30-second local auto-clear.
 - **Vault Integrity Checks:** Detects corrupted or tampered vault files via magic headers.
 - **Password History:** Tracks and stores previous passwords to prevent reuse.
 - **Categories:** Organize credentials using pre-made or custom categories.
-- **ML Password Strength:** Evaluates entropy and calculates password strength dynamically.
+- **Offline ML Password Strength (NLP Stack):** Evaluates password unpredictability dynamically using a built-in Character-Level LSTM Neural Network.
+- **Diceware Passphrase Generator:** Generates highly memorable, cryptographically secure passphrases using the official BIP-39 (Bitcoin Improvement Proposal) word lists.
 - **Data Portability:** Native support for encrypted `.bsx` vault backups and cross-device imports.
+- **Universal & Stealth Steganography:** Hide your encrypted vault completely out of sight by weaving it into the pixels of a high-res image (LSB) or appending it to a video file (EOF).
+- **Scorched Earth Wipe Protocol:** Mathematically destroy the vault and securely zeroize the file from disk using either an Internal or External wipe mechanism.
+- **Cryptographic Rate-Limiting:** Exponential backoff rate limiter using Argon2id to completely neuter online brute-force attacks.
+- **Secure Notes:** A native, zero-knowledge notepad interface featuring masonry grid layouts, dynamic custom folders, pinned notes, and smart time-formatting. Notes are encrypted identically to passwords.
 - **Cross-Platform Readiness:** Tauri v2 architecture allows seamless compilation to Android APKs.
-- **Immersive UI:** Minimalist cryptographic "Iris Shutter" lock and Hex-Line decryption animations.
+- **Immersive UI:** A striking, minimalist interface featuring a 3D Orbital loading screen and smooth, direct user flows.
 
 ---
 
 ## I. THE ARCHITECTURE
 
-Blacksite Node is a fully offline, zero-knowledge password manager. There is no server. There is no account. There is no recovery email. The vault lives on your machine, encrypted, and the only key that exists is the one in your head.
+Blacksite Node is a fully offline, zero-knowledge password manager and secure notepad. There is no server. There is no account. There is no recovery email. The vault lives on your machine, encrypted, and the only key that exists is the one in your head.
 
-**Stack**
+<div align="center">
+  <img src="docs/architecture/system_architecture.png" alt="Blacksite Node System Architecture" width="850"/>
+</div>
 
-```
-┌─────────────────────────────────────────────────┐
-│  React (TypeScript)  ·  Vite  ·  TailwindCSS    │  ← Untrusted display layer
-│  Tauri v2 IPC bridge (JSON over secure channel) │  ← Isolation boundary
-│  Rust cryptographic backend                     │  ← Single source of truth
-│  OS filesystem  ·  vault.blacksite              │  ← One encrypted file
-└─────────────────────────────────────────────────┘
-```
+**Kerckhoffs's Principle**
+
+Blacksite Node strictly adheres to **Kerckhoffs's Principle**: *The security of a cryptographic system shouldn't rely on the secrecy of the algorithm.* Even if everything about the system, except the key, is public knowledge.
+
+Our entire architecture, cryptographic flow, and source code are 100% transparent and open-source. The security of your vault relies entirely on the mathematical strength of ChaCha20-Poly1305 and Argon2id, not on "security through obscurity."
 
 The frontend is treated as an **untrusted display layer**. It never handles raw key material, never makes cryptographic decisions, and never sees plaintext outside of an active unlocked session. All security logic — key derivation, encryption, decryption, rate limiting, duress detection — is implemented exclusively in Rust.
 
@@ -85,7 +90,7 @@ The vault file (`vault.blacksite`) contains:
 }
 ```
 
-The entire credential store is encrypted as a single atomic JSON blob. There is no per-entry encryption. Either the whole vault decrypts (correct passphrase) or nothing does (wrong passphrase → Poly1305 authentication failure before any plaintext is released).
+The entire credential store (passwords, notes, and folders) is encrypted as a single atomic JSON blob. There is no per-entry encryption. Either the whole vault decrypts (correct passphrase) or nothing does (wrong passphrase → Poly1305 authentication failure before any plaintext is released).
 
 **Page Visibility Lock**
 
@@ -154,6 +159,17 @@ A `.bsx` file is identical in structure to the main `vault.blacksite` file. It i
 
 When importing a `.bsx` file on a new device, the user must provide the exact master passphrase used at the time the export was created. The Rust backend temporarily derives the old Argon2id key in memory, decrypts the `.bsx` payload, merges the entries into the active session, and immediately zeroizes the temporary key. The imported data is never written to disk until the active session is securely flushed using the current session's encryption key.
 
+### Steganography Protocol (EOF & LSB)
+
+For users operating under extreme threat models, Blacksite Node features a robust Steganography protocol to physically hide the existence of the vault entirely. The Rust backend is capable of embedding the encrypted vault into seemingly innocent media files (images, audio, or video).
+
+The application supports two cryptographic methodologies for Steganography:
+
+1. **Universal Steganography (EOF Injection):** The vault blob is appended to the End-Of-File (EOF) marker of standard media files (`.jpg`, `.mp4`, `.mp3`). The carrier file continues to play and function normally. While this guarantees preservation across most standard file transfers, it is detectable by deep digital forensics.
+2. **True Stealth Steganography (LSB Encoding):** The vault data is cryptographically shattered and woven directly into the Least Significant Bits (LSB) of a lossless image's pixel data. This creates an imperceptible amount of cryptographic "noise" in the image. To the human eye, the image remains identical. It is nearly undetectable by standard forensic tools, but strictly requires lossless formats like `PNG` or `TIFF`.
+
+When initializing the application on a new device, the setup sequence provides an **Import Methodology** switch allowing users to seamlessly decrypt and restore their vault directly from these steganographic cover files.
+
 ### Vault Backup & Steganography Best Practices
 
 To ensure your encrypted backups and stealth payloads remain viable in the event of hardware failure:
@@ -166,13 +182,23 @@ To ensure your encrypted backups and stealth payloads remain viable in the event
 
 Because Blacksite Node is a strict zero-knowledge architecture, **there is absolutely no password recovery.** If you lose your Master Passphrase, your vault is mathematically irretrievable. 
 
-If you find yourself locked out and wish to completely factory reset the application to initialize a brand new sovereign vault, you must manually delete the local application data directory.
+If you wish to completely factory reset the application to initialize a brand new sovereign vault, you can use the built-in **Wipe Vault** function. There are two locations where this can be triggered:
 
-Open **PowerShell** and execute the following command:
+1. **The External Wipe (From the Lock Screen):** 
+   Click the tiny `"Factory Reset / Wipe Vault"` button at the very bottom of the login screen. Because this is outside the vault, you are **required to input your Master Passphrase** to authorize the destruction. This prevents malicious actors from wiping your data out of spite without knowing your passphrase. If a wrong passphrase is provided, the Argon2id rate-limiter will trigger, locking them out and preventing brute-force wipe attempts.
+
+2. **The Internal Wipe (From Inside the Vault):** 
+   If you are already logged in, click the version number in the bottom-right corner of the sidebar to open the About Menu, then scroll down to the **Danger Zone**. You will be prompted to export your data first. To authorize this internal wipe, you do not need your passphrase; instead, you must manually type the words `WIPE VAULT` into the red verification box to prevent accidental clicks.
+
+> **WARNING regarding Windows Uninstallers (.msi / .nsis)**: 
+> Do **NOT** rely on the Windows Control Panel to "uninstall" Blacksite Node if your goal is to destroy your data. Standard Windows uninstallers intentionally do not touch the `%APPDATA%` directory to prevent accidental data loss. If you simply uninstall the application, your encrypted vault file will remain fully intact on your hard drive. 
+> **Always use the in-app Wipe Vault feature to securely zeroize your vault.**
+
+If the application is entirely unrecoverable and the UI cannot load, you can manually delete the vault via PowerShell:
+
 ```powershell
 Remove-Item -Recurse -Force "$env:APPDATA\com.blacksite.node"
 ```
-After executing, restart the application. You will be greeted by the initial Welcome screen to generate a new vault.
 
 ---
 
@@ -480,8 +506,8 @@ Vault location    :  %APPDATA%\com.blacksite.node\vault.blacksite
 Built by Tauri's bundler as part of `npm run tauri build`. Outputs:
 
 ```
-src-tauri\target\x86_64-pc-windows-gnu\release\bundle\nsis\Blacksite Node_1.0.1_x64-setup.exe
-src-tauri\target\x86_64-pc-windows-gnu\release\bundle\msi\Blacksite Node_1.0.1_x64_en-US.msi
+src-tauri\target\x86_64-pc-windows-gnu\release\bundle\nsis\Blacksite Node_2.0.0_x64-setup.exe
+src-tauri\target\x86_64-pc-windows-gnu\release\bundle\msi\Blacksite Node_2.0.0_x64_en-US.msi
 ```
 
 ---
@@ -497,22 +523,25 @@ Registry entries  :  Zero
 Vault location    :  %APPDATA%\com.blacksite.node\vault.blacksite
 ```
 
-### The GNU Runtime Dependency
-Because Blacksite Node is compiled with the **GNU toolchain** (`x86_64-pc-windows-gnu`), the portable binary does not statically link the WebView2 loader. The portable deployment is a **two-file pair** — both must reside in the same directory.
-```
-blacksite-node.exe    ← main application binary
-WebView2Loader.dll    ← WebView2 runtime bridge (GNU toolchain dependency)
-```
-If `WebView2Loader.dll` is absent, the application will crash on launch.
+### The GNU Runtime & Offline ML Dependencies
+Because Blacksite Node is compiled with the **GNU toolchain** (`x86_64-pc-windows-gnu`) and features a fully offline machine learning engine, the portable deployment requires a specific file structure to function. The binary does not statically link the WebView2 loader, nor does it embed the massive ONNX ML models.
 
-**Recommended operational pattern for USB deployment:**
+**Required operational pattern for USB deployment:**
 
-```
+```text
 [Encrypted USB Drive]
-├── blacksite-node.exe          ← the binary
-├── WebView2Loader.dll          ← GNU runtime dependency
-└── README.txt                  ← passphrase storage reminder
+ ├── blacksite-node.exe                         ← the main app
+ ├── WebView2Loader.dll                         ← GNU runtime dependency
+ ├── inference.exe                              ← offline ML sidecar daemon
+ └── _up_/
+      └── ml_engine/
+           └── exports/
+                ├── password_model.onnx         ← the neural network weights
+                ├── vocab.json                  ← the token vocabulary
+                └── dataset_meta.json
 ```
+
+If any of these files are absent, the application or its machine learning components will fail on launch.
 
 Run from the USB directly. The vault file persists in the host machine's AppData between sessions. The binary itself carries no state. If the USB is lost or seized, the attacker has only an executable — no vault, no credentials.
 

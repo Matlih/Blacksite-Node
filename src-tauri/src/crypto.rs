@@ -144,6 +144,26 @@ pub struct CredentialEntry {
     pub category: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
+pub struct NoteFolder {
+    pub id: String,
+    pub name: String,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Zeroize, ZeroizeOnDrop)]
+pub struct SecureNote {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    #[serde(default)]
+    pub folder_id: Option<String>,
+    #[serde(default)]
+    pub is_pinned: bool,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
 /// The decrypted vault payload serialized to/from JSON before encryption.
 /// The entire struct is treated as a single atomic plaintext blob — there is
 /// no partial encryption. Either the whole vault decrypts (correct key) or
@@ -152,6 +172,10 @@ pub struct CredentialEntry {
 pub struct VaultData {
     pub version: u8,
     pub entries: Vec<CredentialEntry>,
+    #[serde(default)]
+    pub note_folders: Vec<NoteFolder>,
+    #[serde(default)]
+    pub notes: Vec<SecureNote>,
 }
 
 /// The on-disk representation of the vault file.
@@ -472,7 +496,7 @@ pub fn generate_salt() -> [u8; SALT_LEN] {
 pub fn create_duress_blob(canary_passphrase: &str, salt: &[u8; SALT_LEN]) -> Result<DuressBlob, String> {
     let key = derive_key(canary_passphrase, salt)?;
 
-    let empty_vault = VaultData { version: 1, entries: Vec::new() };
+    let empty_vault = VaultData { version: 1, entries: Vec::new(), note_folders: Vec::new(), notes: Vec::new() };
     let plaintext = serde_json::to_vec(&empty_vault)
         .map_err(|e| format!("Serialize error: {e}"))?;
 

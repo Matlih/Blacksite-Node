@@ -111,7 +111,7 @@ export const StegoExportModal: React.FC<StegoExportModalProps> = ({ isOpen, onCl
     setExportComplete(false);
     
     try {
-      let destPath = "";
+      let destPath: string | null = null;
       
       if (mode === "standard") {
         destPath = await saveDialog({
@@ -163,8 +163,8 @@ export const StegoExportModal: React.FC<StegoExportModalProps> = ({ isOpen, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900">
           <h2 className="text-slate-100 font-bold tracking-widest text-sm flex items-center gap-2">
             <ShieldAlert size={16} className="text-emerald-500" />
@@ -217,7 +217,7 @@ export const StegoExportModal: React.FC<StegoExportModalProps> = ({ isOpen, onCl
           </div>
         ) : (
           <>
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               <div className="space-y-3">
                 <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Export Methodology</label>
                 <div className="grid grid-cols-1 gap-3">
@@ -320,6 +320,20 @@ export const StegoExportModal: React.FC<StegoExportModalProps> = ({ isOpen, onCl
               )}
 
               {error && <div className="text-red-400 text-xs bg-red-950/30 p-2 rounded border border-red-900/50">{error}</div>}
+            </div>
+
+            <div className="px-6 pb-4">
+              {mode === "standard" ? (
+                <div className="text-amber-warn text-xs bg-amber-warn/10 p-3 rounded border border-amber-warn/30 leading-relaxed">
+                  <ShieldAlert size={14} className="inline mr-1 mb-0.5" />
+                  <strong>SECURE COLD STORAGE:</strong> Store this .bsx file on physical USB drives. It is cryptographically secure, but you must not lose it.
+                </div>
+              ) : (
+                <div className="text-red-400 text-xs bg-red-950/30 p-3 rounded border border-red-900/50 leading-relaxed">
+                  <ShieldAlert size={14} className="inline mr-1 mb-0.5" />
+                  <strong>CRITICAL WARNING:</strong> Do NOT upload this steganography file to Discord, WhatsApp, or cloud photo apps (Google Photos/iCloud). Compression algorithms will permanently destroy the hidden payload. Store it on a physical USB drive or zip it before emailing.
+                </div>
+              )}
             </div>
 
             <div className="p-4 border-t border-zinc-800 bg-zinc-900 flex justify-end gap-3">

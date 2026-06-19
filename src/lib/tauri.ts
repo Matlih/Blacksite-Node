@@ -25,12 +25,35 @@ export interface CredentialEntry {
   category?: string;
 }
 
+export interface NoteFolder {
+  id: string;
+  name: string;
+  created_at: number;
+}
+
+export interface SecureNote {
+  id: string;
+  title: string;
+  content: string;
+  folder_id?: string;
+  is_pinned: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface VaultStatus {
   vault_exists: boolean;
   is_unlocked: boolean;
   failed_attempts: number;
   lockout_remaining_secs: number;
   is_corrupted: boolean;
+}
+
+export interface MlScoreResult {
+  label: string;
+  nll: number;
+  color_hint: string;
+  char_count: number;
 }
 
 /** Returns vault existence + lock state. Call on every mount. */
@@ -59,6 +82,11 @@ export async function unlockVault(passphrase: string): Promise<void> {
 /** Locks the vault and zeroizes the master key in Rust. */
 export async function lockVault(): Promise<void> {
   return invoke<void>("lock_vault");
+}
+
+/** Evaluates password strength using the Python ML engine */
+export async function checkPasswordStrength(password: string): Promise<MlScoreResult> {
+  return invoke<MlScoreResult>("check_password_strength", { password });
 }
 
 /** Returns all decrypted credential entries. Requires unlocked vault. */
@@ -97,6 +125,57 @@ export async function deleteCredential(id: string): Promise<void> {
 /** Deletes a password history entry for a given credential ID. */
 export async function deleteHistoryEntry(id: string, retiredAt: number): Promise<void> {
   return invoke<void>("delete_history_entry", { id, retiredAt });
+}
+
+// ---------------------------------------------------------------------------
+// Secure Notes APIs
+// ---------------------------------------------------------------------------
+
+export async function getNotes(): Promise<SecureNote[]> {
+  return invoke<SecureNote[]>("get_notes");
+}
+
+export async function addNote(
+  title: string,
+  content: string,
+  folder_id: string | null,
+  is_pinned: boolean
+): Promise<string> {
+  return await invoke("add_note", { title, content, folderId: folder_id, isPinned: is_pinned });
+}
+
+export async function editNote(
+  id: string,
+  title: string,
+  content: string,
+  folder_id: string | null,
+  is_pinned: boolean
+): Promise<void> {
+  return await invoke("edit_note", { id, title, content, folderId: folder_id, isPinned: is_pinned });
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  return await invoke("delete_note", { id });
+}
+
+// ---------------------------------------------------------------------------
+// Note Folders APIs
+// ---------------------------------------------------------------------------
+
+export async function getNoteFolders(): Promise<NoteFolder[]> {
+  return invoke<NoteFolder[]>("get_note_folders");
+}
+
+export async function addNoteFolder(name: string): Promise<string> {
+  return await invoke("add_note_folder", { name });
+}
+
+export async function editNoteFolder(id: string, name: string): Promise<void> {
+  return await invoke("edit_note_folder", { id, name });
+}
+
+export async function deleteNoteFolder(id: string): Promise<void> {
+  return await invoke("delete_note_folder", { id });
 }
 
 /** Generates a fresh Diceware passphrase. */
