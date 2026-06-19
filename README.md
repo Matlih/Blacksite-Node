@@ -57,11 +57,13 @@ VERSION        : v2.0.0
 
 ## I. THE ARCHITECTURE
 
-Blacksite Node is a fully offline, zero-knowledge password manager and secure notepad. There is no server. There is no account. There is no recovery email. The vault lives on your machine, encrypted, and the only key that exists is the one in your head.
+Blacksite Node is a fully offline, zero-knowledge password manager and secure notepad. There is no server. There is no account. There is no recovery email. The vault lives on your machine, encrypted, and the only key that exists is the one in your head... and perhaps a piece of paper.
 
 <div align="center">
   <img src="docs/architecture/system_architecture.png" alt="Blacksite Node System Architecture" width="850"/>
 </div>
+
+**Mermaid Source:** [docs/architecture/architecture_mermaid.md](docs/architecture/architecture_mermaid.md)
 
 **Kerckhoffs's Principle**
 
@@ -319,7 +321,7 @@ $$ \text{NLL} = \frac{-\log P(p)}{n - k} $$
 <div align="center">
   <img src="ml_engine/ml_architecture.png" alt="ML Engine Architecture Flow" width="850"/>
 </div>
-**Code**: `ml_architecture.md`
+**Mermaid Source:** [ml_engine/ml_architecture.md](ml_engine/ml_architecture.md)
 
 ### 5. Testing the ML Engine Locally
 The machine learning engine is completely decoupled from the Tauri application and can be tested directly from your terminal. This guarantees transparent, open-source verification of the neural network's behavior.
