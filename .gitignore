@@ -23,6 +23,9 @@ dist/
 dist-ssr/
 *.local
 
+# --- PyInstaller / Python Build ---
+build/
+
 # --- Rust / Cargo build artifacts ---
 src-tauri/target/
 src-tauri/Cargo.lock
