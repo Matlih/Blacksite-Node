@@ -25,6 +25,17 @@ VERSION        : v2.0.0
   <p><b>Blacksite Node is forever free. No subscriptions. No telemetry. Zero clouds.</b></p>
 </div>
 
+<p align="center">
+  <a href="https://github.com/Matlih/Blacksite-Node/releases">Releases</a> •
+  <a href="#features-overview">Features</a> •
+  <a href="#i-the-architecture">Architecture</a> •
+  <a href="#ii-core-protocols">Protocols</a> •
+  <a href="#iii-the-cryptographic-math">Cryptography</a> •
+  <a href="#iv-machine-learning-engine">Machine Learning</a> •
+  <a href="#v-build-instructions">Build Instructions</a> •
+  <a href="#vii-distribution--deployment">Deployment</a>
+</p>
+
 <br>
 
 <div align="center">
