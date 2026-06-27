@@ -50,12 +50,29 @@ async fn check_password_strength(app: AppHandle, password: String, state: State<
     // Lazy initialization of the daemon sidecar
     if child_guard.is_none() {
         use tauri::path::BaseDirectory;
-        let model_path = app.path().resolve("../ml_engine/exports/password_model.onnx", BaseDirectory::Resource)
-            .map_err(|e| format!("Path error: {}", e))?;
-        let vocab_path = app.path().resolve("../ml_engine/exports/vocab.json", BaseDirectory::Resource)
-            .map_err(|e| format!("Path error: {}", e))?;
-        let meta_path = app.path().resolve("../ml_engine/exports/dataset_meta.json", BaseDirectory::Resource)
-            .map_err(|e| format!("Path error: {}", e))?;
+        let resolve_res = |dev: &str, prod: &str| -> Result<std::path::PathBuf, String> {
+            let exe_dir = std::env::current_exe().map_err(|e| e.to_string())?.parent().unwrap().to_path_buf();
+            
+            // In dev (cargo run): target/debug -> ../../ -> workspace root
+            let dev_path = exe_dir.join("..").join("..").join(dev.replace("../", ""));
+            // In prod: next to executable
+            let prod_path = exe_dir.join(prod.replace("_up_/", "_up_\\").replace("/", "\\"));
+            
+            if dev_path.exists() { return Ok(dev_path); }
+            if prod_path.exists() { return Ok(prod_path); }
+
+            // fallback to Tauri's resolve
+            if let Ok(p) = app.path().resolve(dev, BaseDirectory::Resource) {
+                if p.exists() { return Ok(p); }
+            }
+            if let Ok(p) = app.path().resolve(prod, BaseDirectory::Resource) {
+                if p.exists() { return Ok(p); }
+            }
+            Err(format!("Resource not found: {} | Checked: {:?} and {:?}", dev, dev_path, prod_path))
+        };
+        let model_path = resolve_res("../ml_engine/exports/password_model.onnx", "_up_/ml_engine/exports/password_model.onnx")?;
+        let vocab_path = resolve_res("../ml_engine/exports/vocab.json", "_up_/ml_engine/exports/vocab.json")?;
+        let meta_path = resolve_res("../ml_engine/exports/dataset_meta.json", "_up_/ml_engine/exports/dataset_meta.json")?;
 
         let sidecar_command = app.shell().sidecar("inference")
             .map_err(|e| format!("Failed to create sidecar command: {}", e))?

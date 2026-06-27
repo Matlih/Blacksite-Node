@@ -39,8 +39,13 @@ VERSION        : v2.0.0
 <br>
 
 <div align="center">
-  <img src="public/ui.png" alt="Blacksite Node Vault Interface" width="850"/>
+  <img src="public/ui_password.png" alt="Blacksite Node Vault Interface" width="850"/>
 </div>
+
+<div align="center">
+  <img src="public/ui_notepad.png" alt="Blacksite Node Vault Interface" width="850"/>
+</div>
+
 
 ---
 

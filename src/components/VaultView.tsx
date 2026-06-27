@@ -6,7 +6,7 @@ import {
 import type { CredentialEntry, PasswordHistoryEntry } from "../lib/tauri";
 import { 
   getCredentials, addCredential, editCredential, deleteCredential, 
-  deleteHistoryEntry, lockVault, getAppVersion, secureCopy 
+  deleteHistoryEntry, lockVault, getAppVersion, secureCopy, checkPasswordStrength
 } from "../lib/tauri";
 import { GeneratorModal } from "./GeneratorModal";
 import { IrisShutterLoader } from "./IrisShutterLoader";
@@ -38,23 +38,6 @@ const EMPTY_FORM: CredentialForm = {
 
 type SortField = "service" | "username" | "created_at" | "updated_at" | "category";
 type SortDirection = "asc" | "desc";
-
-const calculateMLStrength = (pwd: string): { score: number, label: string, color: string } => {
-  // TODO: Hook up Random Forest / LSTM model here.
-  // For now, this is a dummy hook that returns a score based on length and charset.
-  if (!pwd) return { score: 0, label: "NONE", color: "bg-ops-700" };
-  let entropy = 0;
-  if (/[a-z]/.test(pwd)) entropy += 26;
-  if (/[A-Z]/.test(pwd)) entropy += 26;
-  if (/[0-9]/.test(pwd)) entropy += 10;
-  if (/[^a-zA-Z0-9]/.test(pwd)) entropy += 32;
-  const bits = pwd.length * Math.log2(entropy || 1);
-  if (bits < 40) return { score: Math.min(33, bits), label: "WEAK", color: "bg-red-500" };
-  if (bits < 60) return { score: Math.min(66, bits), label: "FAIR", color: "bg-yellow-500" };
-  return { score: Math.min(100, bits), label: "STRONG", color: "bg-green-500" };
-};
-
-
 
 export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
   const [entries, setEntries] = useState<CredentialEntry[]>([]);
@@ -93,6 +76,45 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
     const stored = localStorage.getItem("blacksite_autolock_mins");
     return stored ? parseInt(stored, 10) : 5;
   });
+
+  const [mlScore, setMlScore] = useState<{score: number, label: string, color: string}>({ score: 0, label: "NONE", color: "bg-ops-700" });
+
+  useEffect(() => {
+    let active = true;
+    const timeoutId = setTimeout(async () => {
+      if (!form.password) {
+        if (active) setMlScore({ score: 0, label: "NONE", color: "bg-ops-700" });
+        return;
+      }
+      try {
+        const res = await checkPasswordStrength(form.password);
+        if (!active) return;
+        
+        let scorePct = 0;
+        if (res.nll >= 3.0) scorePct = 100;
+        else if (res.nll >= 1.5) scorePct = Math.floor((res.nll / 3.0) * 100);
+        else scorePct = Math.floor((res.nll / 1.5) * 50);
+        
+        let mappedColor = "bg-blue-500";
+        if (res.color_hint === "#e53935") mappedColor = "bg-red-500";
+        else if (res.color_hint === "#fb8c00") mappedColor = "bg-yellow-500";
+        else if (res.color_hint === "#43a047") mappedColor = "bg-green-500";
+        
+        setMlScore({
+          score: Math.min(100, Math.max(0, scorePct)),
+          label: res.label,
+          color: mappedColor
+        });
+      } catch (err) {
+        console.error("ML engine check failed:", err);
+      }
+    }, 300);
+    
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [form.password]);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -436,13 +458,16 @@ export const VaultView: React.FC<VaultViewProps> = ({ onLock }) => {
                   </button>
                 </div>
                 {form.password && (
-                  <div className="flex items-center gap-2">
-                    <div className="h-1 flex-1 bg-ops-800 rounded overflow-hidden">
-                      <div className={`h-full ${calculateMLStrength(form.password).color}`} style={{ width: `${calculateMLStrength(form.password).score}%`, transition: 'width 0.3s ease' }}></div>
+                  <div className="mt-2">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] uppercase tracking-widest text-slate-400">ML Engine Confidence</span>
+                      <span className={`text-[10px] font-bold ${mlScore.color.replace('bg-', 'text-')}`}>
+                        {mlScore.label}
+                      </span>
                     </div>
-                    <span className={`text-[10px] font-bold ${calculateMLStrength(form.password).color.replace('bg-', 'text-')}`}>
-                      {calculateMLStrength(form.password).label}
-                    </span>
+                    <div className="w-full bg-ops-800 h-1.5 rounded-full overflow-hidden">
+                      <div className={`h-full ${mlScore.color}`} style={{ width: `${mlScore.score}%`, transition: 'width 0.3s ease' }}></div>
+                    </div>
                   </div>
                 )}
             </div>

@@ -62,17 +62,42 @@ export default {
       },
       animation: {
         'blink': 'blink 1s step-end infinite',
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'pulse-slow': 'pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'spin-dna': 'spin-dna 3s linear infinite',
+        'fade-in-late': 'fade-in-late 2.2s forwards',
+        'spin-fast': 'spin 1.5s linear infinite',
+        'blade': 'iris-close 2.0s cubic-bezier(0.22, 1, 0.36, 1) forwards',
       },
       keyframes: {
         blink: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0' },
         },
+        'fade-scale-in': {
+          '0%': { transform: 'scale(1.1)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+        'pulse-slow': {
+          '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+          '50%': { opacity: '0.6', transform: 'scale(1.05)' },
+        },
+        'spin-dna': {
+          '0%': { transform: 'rotateX(0deg)' },
+          '100%': { transform: 'rotateX(360deg)' },
+        },
+        'iris-close': {
+          '0%': { transform: 'translateY(-100%) rotate(20deg)' },
+          '100%': { transform: 'translateY(0%) rotate(20deg)' },
+        },
+        'fade-in-late': {
+          '0%, 65%': { opacity: '0', transform: 'scale(0.8)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
       },
     },
   },
   plugins: [
     require('@tailwindcss/forms'),
+    require('tailwindcss-animate'),
   ],
 }
